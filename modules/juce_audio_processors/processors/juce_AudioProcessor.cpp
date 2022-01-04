@@ -902,6 +902,11 @@ AudioProcessorEditor* AudioProcessor::createEditorIfNeeded()
     return ed;
 }
 
+WebViewConfiguration AudioProcessor::getEditorWebViewConfiguration() const
+{
+    return {};
+}
+
 //==============================================================================
 void AudioProcessor::getCurrentProgramStateInformation (juce::MemoryBlock& destData)
 {

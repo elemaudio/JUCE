@@ -963,6 +963,9 @@ public:
         @see createEditor
     */
     virtual bool hasEditor() const = 0;
+    
+    //==============================================================================
+    virtual WebViewConfiguration getEditorWebViewConfiguration() const;
 
     //==============================================================================
     /** Returns the active editor, if there is one. Bear in mind this can return nullptr

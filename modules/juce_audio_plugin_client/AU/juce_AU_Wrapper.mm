@@ -57,6 +57,7 @@ JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wshorten-64-to-32",
 #include <AudioToolbox/AudioUnitUtilities.h>
 #include <CoreMIDI/MIDIServices.h>
 #include <QuartzCore/QuartzCore.h>
+#include <WebKit/WebKit.h>
 #include "CoreAudioUtilityClasses/MusicDeviceBase.h"
 
 /** The BUILD_AU_CARBON_UI flag lets you specify whether old-school carbon hosts are supported as
@@ -86,6 +87,7 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #include <juce_audio_basics/native/juce_mac_CoreAudioLayouts.h>
 #include <juce_audio_processors/format_types/juce_LegacyAudioParameter.cpp>
 #include <juce_audio_processors/format_types/juce_AU_Shared.h>
+#include <juce_gui_extra/native/juce_mac_AudioProcessorWebView.h>
 
 //==============================================================================
 using namespace juce;
@@ -1716,7 +1718,7 @@ public:
             return [NSString stringWithString: nsStringLiteral (JucePlugin_Name)];
         }
 
-        static NSView* uiViewForAudioUnit (id, SEL, AudioUnit inAudioUnit, NSSize)
+        static NSView* uiViewForAudioUnit (id, SEL, AudioUnit inAudioUnit, NSSize size)
         {
             void* pointers[2];
             UInt32 propertySize = sizeof (pointers);
@@ -1725,8 +1727,14 @@ public:
                                       kAudioUnitScope_Global, 0, pointers, &propertySize) == noErr)
             {
                 if (AudioProcessor* filter = static_cast<AudioProcessor*> (pointers[0]))
-                    if (AudioProcessorEditor* editorComp = filter->createEditorIfNeeded())
-                        return EditorCompHolder::createViewFor (filter, static_cast<JuceAU*> (pointers[1]), editorComp);
+                {
+                    auto webConfig = filter->getEditorWebViewConfiguration();
+                    if (! webConfig.url.isEmpty())
+                    {
+                        auto view = createWebViewController(webConfig);
+                        return [view.release() autorelease];
+                    }
+                }
             }
 
             return nil;

@@ -29,217 +29,6 @@ namespace juce
 {
 
 //==============================================================================
-inline Range<int> nsRangeToJuce (NSRange range)
-{
-    return { (int) range.location, (int) (range.location + range.length) };
-}
-
-inline NSRange juceRangeToNS (Range<int> range)
-{
-    return NSMakeRange ((NSUInteger) range.getStart(), (NSUInteger) range.getLength());
-}
-
-inline String nsStringToJuce (NSString* s)
-{
-    return CharPointer_UTF8 ([s UTF8String]);
-}
-
-inline NSString* juceStringToNS (const String& s)
-{
-    return [NSString stringWithUTF8String: s.toUTF8()];
-}
-
-inline NSString* nsStringLiteral (const char* const s) noexcept
-{
-    return [NSString stringWithUTF8String: s];
-}
-
-inline NSString* nsEmptyString() noexcept
-{
-    return [NSString string];
-}
-
-inline NSURL* createNSURLFromFile (const String& f)
-{
-    return [NSURL fileURLWithPath: juceStringToNS (f)];
-}
-
-inline NSURL* createNSURLFromFile (const File& f)
-{
-    return createNSURLFromFile (f.getFullPathName());
-}
-
-inline NSArray* createNSArrayFromStringArray (const StringArray& strings)
-{
-    auto array = [[NSMutableArray alloc] init];
-
-    for (auto string: strings)
-        [array addObject:juceStringToNS (string)];
-
-    return [array autorelease];
-}
-
-inline NSArray* varArrayToNSArray (const var& varToParse);
-
-inline NSDictionary* varObjectToNSDictionary (const var& varToParse)
-{
-    auto dictionary = [NSMutableDictionary dictionary];
-
-    if (varToParse.isObject())
-    {
-        auto* dynamicObject = varToParse.getDynamicObject();
-
-        auto& properties = dynamicObject->getProperties();
-
-        for (int i = 0; i < properties.size(); ++i)
-        {
-            auto* keyString = juceStringToNS (properties.getName (i).toString());
-
-            const var& valueVar = properties.getValueAt (i);
-
-            if (valueVar.isObject())
-            {
-                auto* valueDictionary = varObjectToNSDictionary (valueVar);
-
-                [dictionary setObject: valueDictionary forKey: keyString];
-            }
-            else if (valueVar.isArray())
-            {
-                auto* valueArray = varArrayToNSArray (valueVar);
-
-                [dictionary setObject: valueArray forKey: keyString];
-            }
-            else
-            {
-                auto* valueString = juceStringToNS (valueVar.toString());
-
-                [dictionary setObject: valueString forKey: keyString];
-            }
-        }
-    }
-
-    return dictionary;
-}
-
-inline NSArray* varArrayToNSArray (const var& varToParse)
-{
-    jassert (varToParse.isArray());
-
-    if (! varToParse.isArray())
-        return nil;
-
-    const auto* varArray = varToParse.getArray();
-
-    auto array = [NSMutableArray arrayWithCapacity: (NSUInteger) varArray->size()];
-
-    for (const auto& aVar : *varArray)
-    {
-        if (aVar.isObject())
-        {
-            auto* valueDictionary = varObjectToNSDictionary (aVar);
-
-            [array addObject: valueDictionary];
-        }
-        else if (aVar.isArray())
-        {
-            auto* valueArray = varArrayToNSArray (aVar);
-
-            [array addObject: valueArray];
-        }
-        else
-        {
-            auto* valueString = juceStringToNS (aVar.toString());
-
-            [array addObject: valueString];
-        }
-    }
-
-    return array;
-}
-
-var nsObjectToVar (NSObject* array);
-
-inline var nsDictionaryToVar (NSDictionary* dictionary)
-{
-    DynamicObject::Ptr dynamicObject (new DynamicObject());
-
-    for (NSString* key in dictionary)
-        dynamicObject->setProperty (nsStringToJuce (key), nsObjectToVar (dictionary[key]));
-
-    return var (dynamicObject.get());
-}
-
-inline var nsArrayToVar (NSArray* array)
-{
-    Array<var> resultArray;
-
-    for (id value in array)
-        resultArray.add (nsObjectToVar (value));
-
-    return var (resultArray);
-}
-
-inline var nsObjectToVar (NSObject* obj)
-{
-    if ([obj isKindOfClass: [NSString class]])          return nsStringToJuce ((NSString*) obj);
-    else if ([obj isKindOfClass: [NSNumber class]])     return nsStringToJuce ([(NSNumber*) obj stringValue]);
-    else if ([obj isKindOfClass: [NSDictionary class]]) return nsDictionaryToVar ((NSDictionary*) obj);
-    else if ([obj isKindOfClass: [NSArray class]])      return nsArrayToVar ((NSArray*) obj);
-    else
-    {
-        // Unsupported yet, add here!
-        jassertfalse;
-    }
-
-    return {};
-}
-
-#if JUCE_MAC
-template <typename RectangleType>
-NSRect makeNSRect (const RectangleType& r) noexcept
-{
-    return NSMakeRect (static_cast<CGFloat> (r.getX()),
-                       static_cast<CGFloat> (r.getY()),
-                       static_cast<CGFloat> (r.getWidth()),
-                       static_cast<CGFloat> (r.getHeight()));
-}
-#endif
-
-#if JUCE_INTEL
- template <typename T>
- struct NeedsStret
- {
-    #if JUCE_32BIT
-     static constexpr auto value = sizeof (T) > 8;
-    #else
-     static constexpr auto value = sizeof (T) > 16;
-    #endif
- };
-
- template <>
- struct NeedsStret<void> { static constexpr auto value = false; };
-
- template <typename T, bool b = NeedsStret<T>::value>
- struct MetaSuperFn { static constexpr auto value = objc_msgSendSuper_stret; };
-
- template <typename T>
- struct MetaSuperFn<T, false> { static constexpr auto value = objc_msgSendSuper; };
-#else
- template <typename>
- struct MetaSuperFn { static constexpr auto value = objc_msgSendSuper; };
-#endif
-
-template <typename SuperType, typename ReturnType, typename... Params>
-inline ReturnType ObjCMsgSendSuper (id self, SEL sel, Params... params)
-{
-    using SuperFn = ReturnType (*) (struct objc_super*, SEL, Params...);
-    const auto fn = reinterpret_cast<SuperFn> (MetaSuperFn<ReturnType>::value);
-
-    objc_super s = { self, [SuperType class] };
-    return fn (&s, sel, params...);
-}
-
-//==============================================================================
 struct NSObjectDeleter
 {
     void operator() (NSObject* object) const noexcept
@@ -311,6 +100,205 @@ private:
 
     T item{};
 };
+
+//==============================================================================
+inline Range<int> nsRangeToJuce (NSRange range)
+{
+    return { (int) range.location, (int) (range.location + range.length) };
+}
+
+inline NSRange juceRangeToNS (Range<int> range)
+{
+    return NSMakeRange ((NSUInteger) range.getStart(), (NSUInteger) range.getLength());
+}
+
+inline String nsStringToJuce (NSString* s)
+{
+    return CharPointer_UTF8 ([s UTF8String]);
+}
+
+inline NSString* juceStringToNS (const String& s)
+{
+    return [NSString stringWithUTF8String: s.toUTF8()];
+}
+
+inline NSString* nsStringLiteral (const char* const s) noexcept
+{
+    return [NSString stringWithUTF8String: s];
+}
+
+inline NSString* nsEmptyString() noexcept
+{
+    return [NSString string];
+}
+
+inline NSURL* createNSURLFromFile (const String& f)
+{
+    return [NSURL fileURLWithPath: juceStringToNS (f)];
+}
+
+inline NSURL* createNSURLFromFile (const File& f)
+{
+    return createNSURLFromFile (f.getFullPathName());
+}
+
+inline NSArray* createNSArrayFromStringArray (const StringArray& strings)
+{
+    auto array = [[NSMutableArray alloc] init];
+
+    for (auto string: strings)
+        [array addObject:juceStringToNS (string)];
+
+    return [array autorelease];
+}
+
+//==============================================================================
+inline NSUniquePtr<NSObject> varToNSObject(const var& varToParse);
+inline NSUniquePtr<NSArray> varArrayToNSArray (const var& varToParse);
+
+inline NSUniquePtr<NSDictionary> varObjectToNSDictionary (const var& varToParse)
+{
+    NSUniquePtr<NSMutableDictionary> dictionary([[NSMutableDictionary alloc] init]);
+
+    if (varToParse.isObject())
+    {
+        auto* dynamicObject = varToParse.getDynamicObject();
+        auto& properties = dynamicObject->getProperties();
+
+        for (int i = 0; i < properties.size(); ++i)
+        {
+            NSUniquePtr<NSString> keyString ([[NSString alloc] initWithUTF8String: properties.getName (i).toString().toUTF8()]);
+
+            [dictionary.get() setObject: varToNSObject(properties.getValueAt (i)).get() forKey: keyString.get()];
+        }
+    }
+
+    return dictionary;
+}
+
+inline NSUniquePtr<NSArray> varArrayToNSArray (const var& varToParse)
+{
+    jassert (varToParse.isArray());
+
+    if (! varToParse.isArray())
+        return {};
+
+    const auto* varArray = varToParse.getArray();
+
+    NSUniquePtr<NSMutableArray> array ([[NSMutableArray alloc] initWithCapacity: (NSUInteger) varArray->size()]);
+
+    for (const auto& aVar : *varArray)
+        [array.get() addObject: varToNSObject(aVar).get()];
+
+    return array;
+}
+
+inline NSUniquePtr<NSObject> varToNSObject(const var& v)
+{
+    if (v.isVoid())       return {};
+    if (v.isUndefined())  return {};
+    if (v.isInt())        return NSUniquePtr<NSObject>([[NSNumber alloc] initWithInt:v]);
+    if (v.isInt64())      return NSUniquePtr<NSObject>([[NSNumber alloc] initWithLongLong:v]);
+    if (v.isBool())       return NSUniquePtr<NSObject>([[NSNumber alloc] initWithBool:static_cast<bool>(v) ? YES : NO]);
+    if (v.isDouble())     return NSUniquePtr<NSObject>([[NSNumber alloc] initWithDouble:v]);
+    if (v.isString())     return NSUniquePtr<NSObject>([[NSString alloc] initWithUTF8String: v.toString().toUTF8()]);
+    if (v.isObject())     return varObjectToNSDictionary (v);
+    if (v.isArray())      return varArrayToNSArray (v);
+    if (v.isBinaryData()) return NSUniquePtr<NSObject>([[NSData alloc] initWithBytes:v.getBinaryData()->getData() length:v.getBinaryData()->getSize()]);
+    if (v.isMethod()){
+        jassertfalse;
+    }
+    
+    jassertfalse;
+    return {};
+}
+
+//==============================================================================
+var nsObjectToVar (NSObject* array);
+
+inline var nsDictionaryToVar (NSDictionary* dictionary)
+{
+    DynamicObject::Ptr dynamicObject (new DynamicObject());
+
+    for (NSString* key in dictionary)
+        dynamicObject->setProperty (nsStringToJuce (key), nsObjectToVar (dictionary[key]));
+
+    return var (dynamicObject.get());
+}
+
+inline var nsArrayToVar (NSArray* array)
+{
+    Array<var> resultArray;
+
+    for (id value in array)
+        resultArray.add (nsObjectToVar (value));
+
+    return var (resultArray);
+}
+
+inline var nsObjectToVar (NSObject* obj)
+{
+    if (obj != nullptr)
+    {
+        if ([obj isKindOfClass: [NSString class]])          return nsStringToJuce ((NSString*) obj);
+        else if ([obj isKindOfClass: [NSNumber class]])     return [(NSNumber*)obj doubleValue];
+        else if ([obj isKindOfClass: [NSDictionary class]]) return nsDictionaryToVar ((NSDictionary*) obj);
+        else if ([obj isKindOfClass: [NSArray class]])      return nsArrayToVar ((NSArray*) obj);
+        else if ([obj isKindOfClass: [NSData class]])       return var ([(NSData*)obj bytes], [(NSData*)obj length]);
+        else
+        {
+            // Unsupported yet, add here!
+            jassertfalse;
+        }
+    }
+
+    return {};
+}
+
+#if JUCE_MAC
+template <typename RectangleType>
+NSRect makeNSRect (const RectangleType& r) noexcept
+{
+    return NSMakeRect (static_cast<CGFloat> (r.getX()),
+                       static_cast<CGFloat> (r.getY()),
+                       static_cast<CGFloat> (r.getWidth()),
+                       static_cast<CGFloat> (r.getHeight()));
+}
+#endif
+
+#if JUCE_INTEL
+ template <typename T>
+ struct NeedsStret
+ {
+    #if JUCE_32BIT
+     static constexpr auto value = sizeof (T) > 8;
+    #else
+     static constexpr auto value = sizeof (T) > 16;
+    #endif
+ };
+
+ template <>
+ struct NeedsStret<void> { static constexpr auto value = false; };
+
+ template <typename T, bool b = NeedsStret<T>::value>
+ struct MetaSuperFn { static constexpr auto value = objc_msgSendSuper_stret; };
+
+ template <typename T>
+ struct MetaSuperFn<T, false> { static constexpr auto value = objc_msgSendSuper; };
+#else
+ template <typename>
+ struct MetaSuperFn { static constexpr auto value = objc_msgSendSuper; };
+#endif
+
+template <typename SuperType, typename ReturnType, typename... Params>
+inline ReturnType ObjCMsgSendSuper (id self, SEL sel, Params... params)
+{
+    using SuperFn = ReturnType (*) (struct objc_super*, SEL, Params...);
+    const auto fn = reinterpret_cast<SuperFn> (MetaSuperFn<ReturnType>::value);
+
+    objc_super s = { self, [SuperType class] };
+    return fn (&s, sel, params...);
+}
 
 //==============================================================================
 namespace detail

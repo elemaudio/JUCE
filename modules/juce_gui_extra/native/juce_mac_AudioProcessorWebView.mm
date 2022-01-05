@@ -13,6 +13,17 @@ namespace
 using namespace juce;
 
 //==============================================================================
+// JUCE bridge JavaScript injection
+constexpr char javascriptInjection[] =
+R"END(
+var juceBridge = {
+    postMessage: function (param) {
+        return webkit.messageHandlers.juceBridge.postMessage(param);
+    }
+};
+)END";
+
+//==============================================================================
 class ScriptMessageHandler
 {
 public:
@@ -131,11 +142,49 @@ public:
         std::unique_ptr<NSURLRequest, NSObjectDeleter> req ([[NSURLRequest alloc] initWithURL:url.get()]);
         
         [objcInstance loadRequest:req.get()];
+        
+        if (juceConfig.onLoad)
+            juceConfig.onLoad([this] (String const& script) { return executeScript (script); });
     }
     
 private:
-    void viewDidMoveToSuperview() {}
+    //==============================================================================
+    struct ScriptCompletion
+    {
+        ScriptCompletion(WebkitView& p) : parent(p) {}
+        
+        WebkitView& parent;
+        std::promise<var> result;
+        
+        void completion(id obj, NSError* error)
+        {
+            if (error != nullptr) {
+                try {
+                    // TODO: create a bespoke javascript error exception type
+                    throw std::runtime_error(nsStringToJuce([error localizedDescription]).toRawUTF8());
+                } catch (...) {
+                    try { result.set_exception(std::current_exception()); } catch (...) {}
+                }
+            } else {
+                result.set_value(nsObjectToVar(obj));
+            }
+            
+            // de-allocate myself
+            parent.completions.erase(std::remove_if(parent.completions.begin(), parent.completions.end(),
+                                                    [this] (std::unique_ptr<ScriptCompletion>& p) { return p.get() == this; }),
+                                     parent.completions.end());
+        }
+    };
     
+    std::future<var> executeScript(String const& script)
+    {
+        auto& completionObj = completions.emplace_back(new ScriptCompletion (*this));
+        std::unique_ptr<NSString, NSObjectDeleter> nsScript([[NSString alloc] initWithUTF8String:script.toRawUTF8()]);
+        [objcInstance evaluateJavaScript:nsScript.get() completionHandler:CreateObjCBlock(completionObj.get(), &ScriptCompletion::completion)];
+        return completionObj->result.get_future();
+    }
+    
+    //==============================================================================
     void didReceiveScriptMessage(WKScriptMessage* msg, void (^returnBlock)(id, NSString *))
     {
         if (juceConfig.onMessageReceived)
@@ -168,9 +217,13 @@ private:
     }
     
     //==============================================================================
+    void viewDidMoveToSuperview() {}
+    
+    //==============================================================================
     WKWebView* objcInstance;
     WebViewConfiguration juceConfig;
     std::unique_ptr<NSObject<WKScriptMessageHandlerWithReply>, NSObjectDeleter> messageHandler;
+    std::vector<std::unique_ptr<ScriptCompletion>> completions;
     
     //==============================================================================
     struct Class  : public ObjCClass<WKWebView>
@@ -206,6 +259,13 @@ private:
                 auto scriptMessageHandler = ScriptMessageHandler::createInstance();
                 
                 [userController.get() addScriptMessageHandlerWithReply:scriptMessageHandler.get() contentWorld:[WKContentWorld pageWorld] name:@"juceBridge"];
+                
+                std::unique_ptr<NSString, NSObjectDeleter> nsStringScript([[NSString alloc] initWithUTF8String:javascriptInjection]);
+                std::unique_ptr<WKUserScript, NSObjectDeleter> userScript([[WKUserScript alloc] initWithSource:nsStringScript.get()
+                                                                                                 injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                                                                                              forMainFrameOnly:NO]);
+                [userController.get() addUserScript:userScript.get()];
+                
                 [wkConfig.get() setUserContentController:userController.get()];
 
                 auto frame = CGRectMake(0, 0, config->size.getWidth(), config->size.getHeight());

@@ -902,7 +902,7 @@ AudioProcessorEditor* AudioProcessor::createEditorIfNeeded()
     return ed;
 }
 
-WebViewConfiguration AudioProcessor::getEditorWebViewConfiguration() const
+WebViewConfiguration AudioProcessor::getEditorWebViewConfiguration()
 {
     return {};
 }

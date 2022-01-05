@@ -79,7 +79,7 @@ public:
     //==============================================================================
     AudioProcessorEditor* createEditor() override          { return nullptr; }
     bool hasEditor() const override                        { return false;   }
-    WebViewConfiguration getEditorWebViewConfiguration() const override
+    WebViewConfiguration getEditorWebViewConfiguration() override
     {
         WebViewConfiguration config;
         
@@ -94,6 +94,8 @@ public:
                 p.set_value(53);
                 return p.get_future();
             };
+        
+        config.onLoad = [this] (WebViewConfiguration::ExecuteJavascript && jScript) { javaScriptExecutor = std::move(jScript); javaScriptExecutor("5"); };
         
         return config;
     }
@@ -134,6 +136,7 @@ public:
 private:
     //==============================================================================
     AudioParameterFloat* gain;
+    WebViewConfiguration::ExecuteJavascript javaScriptExecutor;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GainProcessor)

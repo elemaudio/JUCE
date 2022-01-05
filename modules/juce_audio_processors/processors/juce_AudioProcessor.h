@@ -965,7 +965,7 @@ public:
     virtual bool hasEditor() const = 0;
     
     //==============================================================================
-    virtual WebViewConfiguration getEditorWebViewConfiguration() const;
+    virtual WebViewConfiguration getEditorWebViewConfiguration();
 
     //==============================================================================
     /** Returns the active editor, if there is one. Bear in mind this can return nullptr

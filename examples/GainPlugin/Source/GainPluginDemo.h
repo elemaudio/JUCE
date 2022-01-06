@@ -50,7 +50,7 @@
 
 
 //==============================================================================
-class GainProcessor  : public AudioProcessor
+class GainProcessor  : public AudioProcessor, private AudioProcessorParameter::Listener, private AsyncUpdater
 {
 public:
 
@@ -59,7 +59,11 @@ public:
         : AudioProcessor (BusesProperties().withInput  ("Input",  AudioChannelSet::stereo())
                                            .withOutput ("Output", AudioChannelSet::stereo()))
     {
+        addParameter (bypass = new AudioParameterBool ("bypass", "Bypass", false));
         addParameter (gain = new AudioParameterFloat ("gain", "Gain", 0.0f, 1.0f, 0.5f));
+        
+        bypass->addListener(this);
+        gain->addListener(this);
     }
 
     //==============================================================================
@@ -68,12 +72,14 @@ public:
 
     void processBlock (AudioBuffer<float>& buffer, MidiBuffer&) override
     {
-        buffer.applyGain (*gain);
+        auto gainFactor = *bypass ? 1.f : *gain;
+        buffer.applyGain (gainFactor);
     }
 
     void processBlock (AudioBuffer<double>& buffer, MidiBuffer&) override
     {
-        buffer.applyGain ((float) *gain);
+        auto gainFactor = *bypass ? 1.f : *gain;
+        buffer.applyGain (gainFactor);
     }
 
     //==============================================================================
@@ -84,18 +90,33 @@ public:
         WebViewConfiguration config;
         
         config.url = URL("file:///Users/fr810/Development/JUCE/examples/GainPlugin/plugin.html");
-        config.size = Rectangle<int>(0, 0, 640, 100);
+        config.size = Rectangle<int>(0, 0, 200, 100);
         config.onMessageReceived
-            = [] (var const& v) -> std::future<var>
+            = [this] (var const& v) -> std::future<var>
             {
-                DBG(v.toString());
+                if (v["message"] == "param") {
+                    if      (v["param"] == "gain")   gain->setValueNotifyingHost(v["value"]);
+                    else if (v["param"] == "bypass") bypass->setValueNotifyingHost(v["value"]);
+                } else if (v["message"] == "update") {
+                    triggerAsyncUpdate();
+                }
                 
                 std::promise<var> p;
-                p.set_value(53);
+                p.set_value({});
                 return p.get_future();
             };
         
-        config.onLoad = [this] (WebViewConfiguration::ExecuteJavascript && jScript) { javaScriptExecutor = std::move(jScript); javaScriptExecutor("5"); };
+        config.onLoad
+            = [this] (WebViewConfiguration::ExecuteJavascript && jScript)
+            {
+                javaScriptExecutor = std::move(jScript);
+            };
+        
+        config.onDestroy
+            = [this] ()
+            {
+                javaScriptExecutor = {};
+            };
         
         return config;
     }
@@ -135,9 +156,28 @@ public:
 
 private:
     //==============================================================================
+    void handleAsyncUpdate () override {
+        if (javaScriptExecutor) {
+            MemoryOutputStream mo;
+            
+            mo << "updateParam(\"bypass\", " << static_cast<bool>(*bypass) << ");\n";
+            mo << "updateParam(\"gain\", " << static_cast<float>(*gain) << ");\n";
+            
+            javaScriptExecutor(mo.toString());
+        }
+    }
+    
+    void parameterValueChanged (int parameterIndex, float newValue) override {
+        triggerAsyncUpdate();
+    }
+    
+    void parameterGestureChanged (int, bool) override {}
+    
+    //==============================================================================
+    AudioParameterBool* bypass;
     AudioParameterFloat* gain;
+    
     WebViewConfiguration::ExecuteJavascript javaScriptExecutor;
-
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GainProcessor)
 };

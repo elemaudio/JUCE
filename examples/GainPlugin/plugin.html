@@ -1,12 +1,15 @@
-<input type="checkbox" id="bypass" name="bypass"/>
-<label for="bypass">Bypass</label><br/>
-<input type="text" id="debug" name="debug"/>
-<label for="debug">Debug</label><br/>
 <script>
-    function setField (what) {
-        document.getElementById('debug').value = what;
+    function updateParam(paramId, value) {
+        if (paramId == "gain")        { document.getElementById("gain").value = value * 100.; }
+        else if (paramId == "bypass") { document.getElementById("bypass").checked = value; }
+    }
+    
+    window.onload = function () {
+        juceBridge.postMessage({'message': 'update'});
     }
 </script>
-<button name = "button" value = "OK" type = "button" onclick="juceBridge.postMessage('sosko').then(setField)">My Button</button><br/>
-<input type="range" id="gain" name="gain" min="0" max="100"/>
-<label for="range">Gain</label>
+<input type="checkbox" id="bypass" name="bypass" onchange="juceBridge.postMessage({'message': 'param', 'param': 'bypass', 'value': this.checked})"/>
+<label for="bypass">Bypass</label><br/>
+<input type="range" id="gain" value = "0" name="gain" min="0" max="100" oninput="juceBridge.postMessage({'message': 'param', 'param': 'gain', 'value': this.value / 100.})"/>
+<label for="range">Gain</label><br/>
+<button name = "button" value = "Resize" type = "button" onclick="window.resizeTo(800, 400)">Resize!</button>

@@ -189,7 +189,6 @@ private:
     {
         if (juceConfig.onMessageReceived)
         {
-            DBG (nsStringToJuce([((NSObject*)[msg body]) className]));
             auto futureResult = juceConfig.onMessageReceived(nsObjectToVar([msg body]));
             
             // if the future isn't valid then we return void

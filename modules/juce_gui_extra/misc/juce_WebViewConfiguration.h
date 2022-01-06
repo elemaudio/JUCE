@@ -17,6 +17,7 @@ struct WebViewConfiguration
     using ExecuteJavascript = std::function<std::future<var> (String const&)>;
     
     std::function<void (ExecuteJavascript &&)>   onLoad;
+    std::function<void ()>                       onDestroy;
     std::function<std::future<var> (var const&)> onMessageReceived;
 };
 

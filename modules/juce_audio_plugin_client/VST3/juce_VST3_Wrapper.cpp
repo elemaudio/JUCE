@@ -53,8 +53,7 @@ JUCE_BEGIN_NO_SANITIZE ("vptr")
 #include <juce_audio_processors/format_types/juce_VST3Common.h>
 
 #if JUCE_MAC
- #include <juce_core/native/juce_mac_ObjCHelpers.h>
- #include <juce_gui_extra/native/juce_mac_AudioProcessorWebView.h>
+ #include <juce_core/native/juce_mac_CFHelpers.h>
 #endif
 
 #ifndef JUCE_VST3_CAN_REPLACE_VST2
@@ -87,10 +86,14 @@ JUCE_BEGIN_NO_SANITIZE ("vptr")
  std::vector<std::pair<int, std::function<void (int)>>> getFdReadCallbacks();
 #endif
 
+
+
 namespace juce
 {
 
 using namespace Steinberg;
+
+Vst::EditorView* createVST3WebView(WebViewConfiguration &&, Vst::EditController*, AudioProcessor&, ViewRect&);
 
 //==============================================================================
 #if JUCE_MAC
@@ -1166,7 +1169,7 @@ public:
             if (mayCreateEditor) {
                 ViewRect rc (0, 0, webConfig.size.getWidth(), webConfig.size.getHeight());
                 
-                return new JuceVST3Editor (std::move(webConfig), *this, *audioProcessor, rc);
+                return createVST3WebView (std::move(webConfig), this, *audioProcessor->get(), rc);
             }
         }
 
@@ -1488,225 +1491,6 @@ private:
             sendMessage (message);
         }
     }
-
-    class EditorContextMenu  : public HostProvidedContextMenu
-    {
-    public:
-        EditorContextMenu (AudioProcessorEditor& editorIn,
-                           VSTComSmartPtr<Steinberg::Vst::IContextMenu> contextMenuIn)
-            : editor (editorIn), contextMenu (contextMenuIn) {}
-
-        PopupMenu getEquivalentPopupMenu() const override
-        {
-            using MenuItem   = Steinberg::Vst::IContextMenuItem;
-            using MenuTarget = Steinberg::Vst::IContextMenuTarget;
-
-            struct Submenu
-            {
-                PopupMenu menu;
-                String name;
-                bool enabled;
-            };
-
-            std::vector<Submenu> menuStack (1);
-
-            for (int32_t i = 0, end = contextMenu->getItemCount(); i < end; ++i)
-            {
-                MenuItem item{};
-                MenuTarget* target = nullptr;
-                contextMenu->getItem (i, item, &target);
-
-                if ((item.flags & MenuItem::kIsGroupStart) == MenuItem::kIsGroupStart)
-                {
-                    menuStack.push_back ({ PopupMenu{},
-                                           toString (item.name),
-                                           (item.flags & MenuItem::kIsDisabled) == 0 });
-                }
-                else if ((item.flags & MenuItem::kIsGroupEnd) == MenuItem::kIsGroupEnd)
-                {
-                    const auto back = menuStack.back();
-                    menuStack.pop_back();
-
-                    if (menuStack.empty())
-                    {
-                        // malformed menu
-                        jassertfalse;
-                        return {};
-                    }
-
-                    menuStack.back().menu.addSubMenu (back.name, back.menu, back.enabled);
-                }
-                else if ((item.flags & MenuItem::kIsSeparator) == MenuItem::kIsSeparator)
-                {
-                    menuStack.back().menu.addSeparator();
-                }
-                else
-                {
-                    VSTComSmartPtr<MenuTarget> ownedTarget (target);
-                    const auto tag = item.tag;
-                    menuStack.back().menu.addItem (toString (item.name),
-                                                   (item.flags & MenuItem::kIsDisabled) == 0,
-                                                   (item.flags & MenuItem::kIsChecked) != 0,
-                                                   [ownedTarget, tag] { ownedTarget->executeMenuItem (tag); });
-                }
-            }
-
-            if (menuStack.size() != 1)
-            {
-                // malformed menu
-                jassertfalse;
-                return {};
-            }
-
-            return menuStack.back().menu;
-        }
-
-        void showNativeMenu (Point<int> pos) const override
-        {
-            const auto scaled = pos * Component::getApproximateScaleFactorForComponent (&editor);
-            contextMenu->popup (scaled.x, scaled.y);
-        }
-
-    private:
-        AudioProcessorEditor& editor;
-        VSTComSmartPtr<Steinberg::Vst::IContextMenu> contextMenu;
-    };
-
-    class EditorHostContext  : public AudioProcessorEditorHostContext
-    {
-    public:
-        EditorHostContext (JuceAudioProcessor& processorIn,
-                           AudioProcessorEditor& editorIn,
-                           Steinberg::Vst::IComponentHandler* handler,
-                           Steinberg::IPlugView* viewIn)
-            : processor (processorIn), editor (editorIn), componentHandler (handler), view (viewIn) {}
-
-        std::unique_ptr<HostProvidedContextMenu> getContextMenuForParameter (const AudioProcessorParameter* parameter) const override
-        {
-            if (componentHandler == nullptr || view == nullptr)
-                return {};
-
-            Steinberg::FUnknownPtr<Steinberg::Vst::IComponentHandler3> handler (componentHandler);
-
-            if (handler == nullptr)
-                return {};
-
-            const auto idToUse = parameter != nullptr ? processor.getVSTParamIDForIndex (parameter->getParameterIndex()) : 0;
-            const auto menu = VSTComSmartPtr<Steinberg::Vst::IContextMenu> (handler->createContextMenu (view, &idToUse));
-            return std::make_unique<EditorContextMenu> (editor, menu);
-        }
-
-    private:
-        JuceAudioProcessor& processor;
-        AudioProcessorEditor& editor;
-        Steinberg::Vst::IComponentHandler* componentHandler = nullptr;
-        Steinberg::IPlugView* view = nullptr;
-    };
-
-    //==============================================================================
-    class JuceVST3Editor  : public Vst::EditorView
-    {
-    public:
-        JuceVST3Editor (WebViewConfiguration && webConfig, JuceVST3EditController& ec, JuceAudioProcessor& p, ViewRect& webViewBounds)
-            : Vst::EditorView (&ec, &webViewBounds),
-              owner (&ec),
-              pluginInstance (*p.get()),
-              webViewConfig (std::move(webConfig))
-        {}
-
-        REFCOUNT_METHODS (Vst::EditorView)
-
-        //==============================================================================
-        tresult PLUGIN_API isPlatformTypeSupported (FIDString type) override
-        {
-            if (type != nullptr && (! webViewConfig.url.isEmpty()))
-            {
-                if (strcmp (type, kPlatformTypeNSView) == 0)
-                    return kResultTrue;
-            }
-
-            return kResultFalse;
-        }
-
-        tresult PLUGIN_API attached (void* parent, FIDString type) override
-        {
-            if (parent == nullptr || isPlatformTypeSupported (type) == kResultFalse)
-                return kResultFalse;
-
-            auto parentView = static_cast<NSView*>(parent);
-            webView = createWebViewController (webViewConfig,
-                                               [this] (int width, int height)
-                                               {
-                                                    if (plugFrame != nullptr) {
-                                                        ViewRect rc (0, 0, width, height);
-                                                        plugFrame->resizeView (this, &rc);
-                                                    }
-                                               });
-            
-            [webView.get() setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
-            auto parentBounds = [parentView bounds];
-            [webView.get() setBounds:parentBounds];
-            [parentView addSubview:webView.get()];
-            
-
-            return kResultTrue;
-        }
-
-        tresult PLUGIN_API removed() override
-        {
-            if (webView != nullptr) {
-                [webView.get() removeFromSuperviewWithoutNeedingDisplay];
-                webView = nullptr;
-            }
-
-            return CPluginView::removed();
-        }
-
-        tresult PLUGIN_API onSize (ViewRect* newSize) override
-        {
-            // do nothing: we resize with our parent view
-            return kResultTrue;
-        }
-
-        tresult PLUGIN_API getSize (ViewRect* size) override
-        {
-            if (size != nullptr)
-            {
-                if (webView != nullptr) {
-                    auto bounds = [webView.get() bounds];
-                    *size = ViewRect (0, 0, bounds.size.width, bounds.size.height);
-                } else {
-                    *size = ViewRect (0, 0, webViewConfig.size.getWidth(), webViewConfig.size.getHeight());
-                }
-                
-                return kResultTrue;
-            }
-
-            return kResultFalse;
-        }
-
-        tresult PLUGIN_API canResize() override
-        {
-            return kResultTrue;
-        }
-
-        tresult PLUGIN_API checkSizeConstraint (ViewRect* rectToCheck) override
-        {
-            return kResultTrue;
-        }
-
-    private:
-
-        //==============================================================================
-        ScopedJuceInitialiser_GUI libraryInitialiser;
-        VSTComSmartPtr<JuceVST3EditController> owner;
-        AudioProcessor& pluginInstance;
-        WebViewConfiguration webViewConfig;
-        std::unique_ptr<NSView, NSObjectDeleter> webView;
-
-        //==============================================================================
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JuceVST3Editor)
-    };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JuceVST3EditController)
 };

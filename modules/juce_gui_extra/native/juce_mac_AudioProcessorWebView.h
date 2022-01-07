@@ -10,7 +10,8 @@ namespace juce
 {
 #if JUCE_MAC || DOXYGEN
 
-std::unique_ptr<NSView, NSObjectDeleter> createWebViewController(WebViewConfiguration const& userConfig);
+std::unique_ptr<NSView, NSObjectDeleter> createWebViewController(WebViewConfiguration const& userConfig,
+                                                                 std::function<void (int width, int height)> && resizeCallback = {});
 
 #endif
 

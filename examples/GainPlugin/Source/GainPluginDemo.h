@@ -81,6 +81,8 @@ public:
         auto gainFactor = *bypass ? 1.f : *gain;
         buffer.applyGain (gainFactor);
     }
+    
+    AudioProcessorParameter* getBypassParameter() const override { return bypass; }
 
     //==============================================================================
     AudioProcessorEditor* createEditor() override          { return nullptr; }

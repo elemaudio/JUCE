@@ -18,7 +18,11 @@ constexpr char javascriptInjection[] =
 R"END(
 var juceBridge = {
     postMessage: function (param) {
-        return webkit.messageHandlers.juceBridge.postMessage(param);
+        return webkit.messageHandlers.juceBridge.postMessage(['message', param]);
+    },
+
+    resizeTo: function (width, height) {
+        return webkit.messageHandlers.juceBridge.postMessage(['resize', [width, height]]);
     }
 };
 )END";
@@ -108,8 +112,10 @@ class WebkitView
 {
 public:
     WebkitView(WKWebView* objcClassInstance, WebViewConfiguration const& userConfig,
-               std::unique_ptr<NSObject<WKScriptMessageHandlerWithReply>, NSObjectDeleter> && scriptMessageHandler)
-        : objcInstance(objcClassInstance), juceConfig(userConfig), messageHandler (std::move (scriptMessageHandler))
+               std::unique_ptr<NSObject<WKScriptMessageHandlerWithReply>, NSObjectDeleter> && scriptMessageHandler,
+               std::function<void (int width, int height)> && resizeCB)
+        : objcInstance(objcClassInstance), juceConfig(userConfig), messageHandler (std::move (scriptMessageHandler)),
+          resizeCallback (std::move (resizeCB))
     {
         ScriptMessageHandler::Class::_this(messageHandler.get())->messageCallback
             = [this] (WKScriptMessage* msg, void (^returnBlock)(id, NSString *))
@@ -120,17 +126,22 @@ public:
     
     ~WebkitView()
     {
+        if (juceConfig.onDestroy)
+            juceConfig.onDestroy();
+
         ScriptMessageHandler::Class::_this(messageHandler.get())->messageCallback = {};
         [[[objcInstance configuration] userContentController] removeScriptMessageHandlerForName:@"juceBridge"];
     }
     
-    static std::unique_ptr<WKWebView, NSObjectDeleter> createInstance(WebViewConfiguration const& config)
+    static std::unique_ptr<WKWebView, NSObjectDeleter> createInstance(WebViewConfiguration const& config,
+                                                                      std::function<void (int width, int height)> && resizeCB)
     {
         static Class cls;
         WebViewConfiguration configCopy (config);
         
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wobjc-method-access")
-        return std::unique_ptr<WKWebView, NSObjectDeleter> ([cls.createInstance() initWithWebViewConfiguration:&configCopy]);
+        return std::unique_ptr<WKWebView, NSObjectDeleter> ([cls.createInstance() initWithWebViewConfiguration:&configCopy
+                                                                                                resizeCallback:std::move (resizeCB)]);
         JUCE_END_IGNORE_WARNINGS_GCC_LIKE
     }
     
@@ -148,70 +159,88 @@ public:
     }
     
 private:
-    //==============================================================================
-    struct ScriptCompletion
-    {
-        ScriptCompletion(WebkitView& p) : parent(p) {}
-        
-        WebkitView& parent;
-        std::promise<var> result;
-        
-        void completion(id obj, NSError* error)
-        {
-            if (error != nullptr) {
-                try {
-                    // TODO: create a bespoke javascript error exception type
-                    throw std::runtime_error(nsStringToJuce([error localizedDescription]).toRawUTF8());
-                } catch (...) {
-                    try { result.set_exception(std::current_exception()); } catch (...) {}
-                }
-            } else {
-                result.set_value(nsObjectToVar(obj));
-            }
-            
-            // de-allocate myself
-            parent.completions.erase(std::remove_if(parent.completions.begin(), parent.completions.end(),
-                                                    [this] (std::unique_ptr<ScriptCompletion>& p) { return p.get() == this; }),
-                                     parent.completions.end());
-        }
-    };
-    
     std::future<var> executeScript(String const& script)
     {
-        auto& completionObj = completions.emplace_back(new ScriptCompletion (*this));
         std::unique_ptr<NSString, NSObjectDeleter> nsScript([[NSString alloc] initWithUTF8String:script.toRawUTF8()]);
-        [objcInstance evaluateJavaScript:nsScript.get() completionHandler:CreateObjCBlock(completionObj.get(), &ScriptCompletion::completion)];
-        return completionObj->result.get_future();
+        
+        __block std::promise<var> result;
+        [objcInstance evaluateJavaScript:nsScript.get()
+                       completionHandler:^void (id obj, NSError* error)
+                                         {
+                                            if (error != nullptr) {
+                                                try {
+                                                    // TODO: create a bespoke javascript error exception type
+                                                    throw std::runtime_error(nsStringToJuce([error localizedDescription]).toRawUTF8());
+                                                } catch (...) {
+                                                    try { result.set_exception(std::current_exception()); } catch (...) {}
+                                                }
+                                            } else {
+                                                result.set_value(nsObjectToVar(obj));
+                                            }
+                                        }];
+        return result.get_future();
     }
     
     //==============================================================================
     void didReceiveScriptMessage(WKScriptMessage* msg, void (^returnBlock)(id, NSString *))
     {
-        if (juceConfig.onMessageReceived)
-        {
-            auto futureResult = juceConfig.onMessageReceived(nsObjectToVar([msg body]));
-            
-            // if the future isn't valid then we return void
-            if (futureResult.valid())
+        if (! [[msg body] isKindOfClass: [NSArray class]]) {
+            returnBlock(nullptr, @"Unexpected payload");
+            return;
+        }
+        
+        auto* payload = (NSArray*)[msg body];
+        if ([payload count] < 2 || (! [[payload objectAtIndex:0] isKindOfClass: [NSString class]])) {
+            returnBlock(nullptr, @"Unexpected payload");
+            return;
+        }
+        
+        auto msgType = nsStringToJuce((NSString*)[payload objectAtIndex:0]);
+        auto params = nsObjectToVar([payload objectAtIndex:1]);
+        
+        if (msgType == "message") {
+            if (juceConfig.onMessageReceived)
             {
-                if (futureResult.wait_for (std::chrono::seconds (0)) == std::future_status::timeout)
+                auto futureResult = juceConfig.onMessageReceived(params);
+                
+                // if the future isn't valid then we return void
+                if (futureResult.valid())
                 {
-                    // TODO: deal with asynchronous results
+                    if (futureResult.wait_for (std::chrono::seconds (0)) == std::future_status::timeout)
+                    {
+                        // TODO: deal with asynchronous results
+                    }
+                    else
+                    {
+                        returnBlock (varToNSObject (futureResult.get()).get(), nullptr);
+                    }
                 }
                 else
                 {
-                    returnBlock (varToNSObject (futureResult.get()).get(), nullptr);
+                    // a default constructed future object was returned: return void
+                    returnBlock(nullptr, nullptr);
                 }
+            } else {
+                returnBlock(nullptr, @"Message unhandled");
+                return;
             }
+        } else if (msgType == "resize") {
+            if (params.size() != 2) {
+                returnBlock(nullptr, @"Unexpected payload");
+                return;
+            }
+                
+            auto width  = static_cast<int>(params[0]);
+            auto height = static_cast<int>(params[1]);
+            
+            if (resizeCallback)
+                resizeCallback (width, height);
             else
-            {
-                // a default constructed future object was returned: return void
-                returnBlock(nullptr, nullptr);
-            }
-        }
-        else
-        {
-            returnBlock(nullptr, @"Message unhandled");
+                [objcInstance setFrameSize:CGSizeMake(width, height)];
+            
+            returnBlock(nullptr, nullptr);
+        } else {
+            returnBlock(nullptr, @"Unknown internal message type");
         }
     }
     
@@ -222,7 +251,7 @@ private:
     WKWebView* objcInstance;
     WebViewConfiguration juceConfig;
     std::unique_ptr<NSObject<WKScriptMessageHandlerWithReply>, NSObjectDeleter> messageHandler;
-    std::vector<std::unique_ptr<ScriptCompletion>> completions;
+    std::function<void (int width, int height)> resizeCallback;
     
     //==============================================================================
     struct Class  : public ObjCClass<WKWebView>
@@ -233,7 +262,7 @@ private:
             
             //==============================================================================
             JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
-            addMethod (@selector (initWithWebViewConfiguration:),                  initWithWebViewConfiguration);
+            addMethod (@selector (initWithWebViewConfiguration:resizeCallback:),   initWithWebViewConfiguration);
             JUCE_END_IGNORE_WARNINGS_GCC_LIKE
             addMethod (@selector (dealloc),                                        dealloc);
             
@@ -248,7 +277,7 @@ private:
         static void setThis (id self, WebkitView* cpp)         { object_setInstanceVariable  (self, "cppObject", cpp); }
 
         //==============================================================================
-        static id initWithWebViewConfiguration (id _self, SEL, WebViewConfiguration* config)
+        static id initWithWebViewConfiguration (id _self, SEL, WebViewConfiguration* config, std::function<void (int width, int height)> && resizeCB)
         {
             WKWebView* self = _self;
             
@@ -271,7 +300,7 @@ private:
                 
                 self = ObjCMsgSendSuper<WKWebView, WKWebView*, CGRect, WKWebViewConfiguration*> (self, @selector (initWithFrame:configuration:), frame, wkConfig.get());
 
-                WebkitView* juceWK = new WebkitView (self, *config, std::move(scriptMessageHandler));
+                WebkitView* juceWK = new WebkitView (self, *config, std::move (scriptMessageHandler), std::move (resizeCB));
                 setThis (self, juceWK);
                 
                 juceWK->load();
@@ -296,9 +325,10 @@ private:
 namespace juce
 {
 
-std::unique_ptr<NSView, NSObjectDeleter> createWebViewController(WebViewConfiguration const& userConfig)
+std::unique_ptr<NSView, NSObjectDeleter> createWebViewController(WebViewConfiguration const& userConfig,
+                                                                 std::function<void (int width, int height)> && resizeCallback)
 {
-    return WebkitView::createInstance(userConfig);
+    return WebkitView::createInstance(userConfig, std::move (resizeCallback));
 }
 
 }

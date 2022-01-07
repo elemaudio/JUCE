@@ -155,30 +155,19 @@ public:
         [objcInstance loadRequest:req.get()];
         
         if (juceConfig.onLoad)
-            juceConfig.onLoad([this] (String const& script) { return executeScript (script); });
+            juceConfig.onLoad([this] (String const& msg) { return sendMessageToJavaScript (msg); });
     }
     
 private:
-    std::future<var> executeScript(String const& script)
+    void sendMessageToJavaScript(String const& msg)
     {
-        std::unique_ptr<NSString, NSObjectDeleter> nsScript([[NSString alloc] initWithUTF8String:script.toRawUTF8()]);
-        
-        __block std::promise<var> result;
-        [objcInstance evaluateJavaScript:nsScript.get()
-                       completionHandler:^void (id obj, NSError* error)
-                                         {
-                                            if (error != nullptr) {
-                                                try {
-                                                    // TODO: create a bespoke javascript error exception type
-                                                    throw std::runtime_error(nsStringToJuce([error localizedDescription]).toRawUTF8());
-                                                } catch (...) {
-                                                    try { result.set_exception(std::current_exception()); } catch (...) {}
-                                                }
-                                            } else {
-                                                result.set_value(nsObjectToVar(obj));
-                                            }
-                                        }];
-        return result.get_future();
+        std::unique_ptr<NSString, NSObjectDeleter> nsMsg([[NSString alloc] initWithUTF8String:msg.toRawUTF8()]);
+        std::unique_ptr<NSDictionary, NSObjectDeleter> args ([[NSDictionary alloc] initWithObjectsAndKeys:nsMsg.get(),@"msg",nullptr]);
+        [objcInstance callAsyncJavaScript:@"juceBridgeOnMessage(msg);"
+                                arguments:args.get()
+                                  inFrame:nullptr
+                           inContentWorld:[WKContentWorld pageWorld]
+                        completionHandler:nullptr];
     }
     
     //==============================================================================
@@ -199,31 +188,13 @@ private:
         auto params = nsObjectToVar([payload objectAtIndex:1]);
         
         if (msgType == "message") {
-            if (juceConfig.onMessageReceived)
-            {
-                auto futureResult = juceConfig.onMessageReceived(params);
-                
-                // if the future isn't valid then we return void
-                if (futureResult.valid())
-                {
-                    if (futureResult.wait_for (std::chrono::seconds (0)) == std::future_status::timeout)
-                    {
-                        // TODO: deal with asynchronous results
-                    }
-                    else
-                    {
-                        returnBlock (varToNSObject (futureResult.get()).get(), nullptr);
-                    }
-                }
-                else
-                {
-                    // a default constructed future object was returned: return void
-                    returnBlock(nullptr, nullptr);
-                }
+            if (juceConfig.onMessageReceived) {
+                juceConfig.onMessageReceived (params);
             } else {
                 returnBlock(nullptr, @"Message unhandled");
-                return;
             }
+
+            return;
         } else if (msgType == "resize") {
             if (params.size() != 2) {
                 returnBlock(nullptr, @"Unexpected payload");

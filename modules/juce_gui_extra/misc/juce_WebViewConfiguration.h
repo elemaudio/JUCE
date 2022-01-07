@@ -14,11 +14,11 @@ struct WebViewConfiguration
     URL url;
     Rectangle<int> size;
     
-    using ExecuteJavascript = std::function<std::future<var> (String const&)>;
+    using JSMessagePoster = std::function<void (String const&)>;
     
-    std::function<void (ExecuteJavascript &&)>   onLoad;
-    std::function<void ()>                       onDestroy;
-    std::function<std::future<var> (var const&)> onMessageReceived;
+    std::function<void (JSMessagePoster &&)>   onLoad;
+    std::function<void ()>                     onDestroy;
+    std::function<void (String const&)>        onMessageReceived;
 };
 
 }

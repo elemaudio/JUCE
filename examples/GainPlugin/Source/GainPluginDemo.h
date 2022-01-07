@@ -94,30 +94,32 @@ public:
         config.url = URL("file:///Users/fr810/Development/JUCE/examples/GainPlugin/plugin.html");
         config.size = Rectangle<int>(0, 0, 200, 100);
         config.onMessageReceived
-            = [this] (var const& v) -> std::future<var>
+            = [this] (String const& v)
             {
-                if (v["message"] == "param") {
-                    if      (v["param"] == "gain")   gain->setValueNotifyingHost(v["value"]);
-                    else if (v["param"] == "bypass") bypass->setValueNotifyingHost(v["value"]);
-                } else if (v["message"] == "update") {
+                auto args = StringArray::fromTokens(v, "@", {});
+                auto msg = args[0];
+                
+                if (msg == "param") {
+                    auto param = args[1];
+                    auto value = args[2].getFloatValue();
+                    
+                    if      (param == "gain")   gain->setValueNotifyingHost(value);
+                    else if (param == "bypass") bypass->setValueNotifyingHost(value);
+                } else if (msg == "update") {
                     triggerAsyncUpdate();
                 }
-                
-                std::promise<var> p;
-                p.set_value({});
-                return p.get_future();
             };
         
         config.onLoad
-            = [this] (WebViewConfiguration::ExecuteJavascript && jScript)
+            = [this] (WebViewConfiguration::JSMessagePoster && messagePoster)
             {
-                javaScriptExecutor = std::move(jScript);
+                sendMessageToJavascript = std::move(messagePoster);
             };
         
         config.onDestroy
             = [this] ()
             {
-                javaScriptExecutor = {};
+                sendMessageToJavascript = {};
             };
         
         return config;
@@ -159,13 +161,18 @@ public:
 private:
     //==============================================================================
     void handleAsyncUpdate () override {
-        if (javaScriptExecutor) {
-            MemoryOutputStream mo;
+        if (sendMessageToJavascript) {
+            {
+                MemoryOutputStream mo;
+                mo << "bypass@" << (static_cast<bool>(*bypass) ? 1 : 0);
+                sendMessageToJavascript(mo.toString());
+            }
             
-            mo << "updateParam(\"bypass\", " << static_cast<bool>(*bypass) << ");\n";
-            mo << "updateParam(\"gain\", " << static_cast<float>(*gain) << ");\n";
-            
-            javaScriptExecutor(mo.toString());
+            {
+                MemoryOutputStream mo;
+                mo << "gain@"   << static_cast<float>(*gain) << "\n";
+                sendMessageToJavascript(mo.toString());
+            }
         }
     }
     
@@ -179,7 +186,7 @@ private:
     AudioParameterBool* bypass;
     AudioParameterFloat* gain;
     
-    WebViewConfiguration::ExecuteJavascript javaScriptExecutor;
+    WebViewConfiguration::JSMessagePoster sendMessageToJavascript;
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GainProcessor)
 };

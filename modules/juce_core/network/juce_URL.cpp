@@ -19,10 +19,101 @@
 
   ==============================================================================
 */
-
 namespace juce
 {
+static String base64Encode(MemoryBlock const& mb) {
+    static constexpr char sEncodingTable[] = {
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+        'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+        'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+        'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+        'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+        'w', 'x', 'y', 'z', '0', '1', '2', '3',
+        '4', '5', '6', '7', '8', '9', '+', '/'
+    };
 
+    size_t in_len = mb.getSize();
+    size_t out_len = 4 * ((in_len + 2) / 3);
+
+    HeapBlock<char> ret(out_len, true);
+    size_t i;
+    auto *p = ret.get();
+    auto const* data = static_cast<char const*>(mb.getData());
+
+    for (i = 0; i < in_len - 2; i += 3) {
+        *p++ = sEncodingTable[(data[i] >> 2) & 0x3F];
+        *p++ = sEncodingTable[((data[i] & 0x3) << 4) | ((int) (data[i + 1] & 0xF0) >> 4)];
+        *p++ = sEncodingTable[((data[i + 1] & 0xF) << 2) | ((int) (data[i + 2] & 0xC0) >> 6)];
+        *p++ = sEncodingTable[data[i + 2] & 0x3F];
+    }
+    if (i < in_len) {
+        *p++ = sEncodingTable[(data[i] >> 2) & 0x3F];
+        if (i == (in_len - 1)) {
+        *p++ = sEncodingTable[((data[i] & 0x3) << 4)];
+        *p++ = '=';
+        }
+        else {
+        *p++ = sEncodingTable[((data[i] & 0x3) << 4) | ((int) (data[i + 1] & 0xF0) >> 4)];
+        *p++ = sEncodingTable[((data[i + 1] & 0xF) << 2)];
+        }
+        *p++ = '=';
+    }
+
+    return String(ret.get(), out_len);
+}
+
+static bool base64Decode(String const& b64string, MemoryBlock& result) {
+    static constexpr unsigned char kDecodingTable[] = {
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 62, 64, 64, 64, 63,
+        52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 64, 64, 64, 64, 64, 64,
+        64,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,
+        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 64, 64, 64, 64, 64,
+        64, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+        41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64
+    };
+
+    auto in_len = static_cast<size_t>(b64string.length());
+
+    if (in_len % 4 != 0)
+        return false;
+
+    auto const* input = b64string.toRawUTF8();
+
+    auto out_len = in_len / 4 * 3;
+    if (input[in_len - 1] == '=') out_len--;
+    if (input[in_len - 2] == '=') out_len--;
+
+    result.setSize(out_len, true);
+    auto* out = static_cast<char*>(result.getData());
+
+    for (size_t i = 0, j = 0; i < in_len;) {
+        uint32_t a = input[i] == '=' ? 0 & i++ : kDecodingTable[static_cast<int>(input[i++])];
+        uint32_t b = input[i] == '=' ? 0 & i++ : kDecodingTable[static_cast<int>(input[i++])];
+        uint32_t c = input[i] == '=' ? 0 & i++ : kDecodingTable[static_cast<int>(input[i++])];
+        uint32_t d = input[i] == '=' ? 0 & i++ : kDecodingTable[static_cast<int>(input[i++])];
+
+        uint32_t triple = (a << 3 * 6) + (b << 2 * 6) + (c << 1 * 6) + (d << 0 * 6);
+
+        if (j < out_len) out[j++] = static_cast<char>((triple >> 2 * 8) & 0xFF);
+        if (j < out_len) out[j++] = static_cast<char>((triple >> 1 * 8) & 0xFF);
+        if (j < out_len) out[j++] = static_cast<char>((triple >> 0 * 8) & 0xFF);
+    }
+
+    return true;
+}
+
+//==============================================================================
 struct FallbackDownloadTask  : public URL::DownloadTask,
                                public Thread
 {
@@ -172,6 +263,25 @@ URL::URL (File localFile)
     }
 
     url = "file://" + url;
+
+    jassert (isWellFormed());
+}
+
+URL::URL (MemoryBlock const& data, String const& mimeType)
+{
+    MemoryOutputStream mo;
+
+    mo << "data:";
+
+    if (mimeType.isNotEmpty()) {
+        // use a real mime-type please
+        jassert (mimeType.containsChar('/') && (! mimeType.containsChar(';')) && (! mimeType.containsChar(',')));
+        mo << mimeType;
+    }
+
+    mo << ";base64,";
+    mo << base64Encode(data);
+    url = mo.toString();
 
     jassert (isWellFormed());
 }
@@ -373,6 +483,43 @@ String URL::getFileName() const
     return toString (false).fromLastOccurrenceOf ("/", false, true);
 }
 #endif
+
+bool URL::isDataScheme() const
+{
+    return url.startsWith("data:") && url.containsChar(',');
+}
+
+MemoryBlock URL::getURLEncodedData (String& mimeType) const
+{
+    auto scheme = url.upToFirstOccurrenceOf (",", false, false);
+    auto attr = url.fromFirstOccurrenceOf (":", false, false).upToLastOccurrenceOf(",", false, false);
+
+    auto parts = StringArray::fromTokens (attr, ";", {});
+    auto isBase64 = parts.isEmpty() ? false : (parts[parts.size() - 1] == "base64");
+
+    mimeType = parts.joinIntoString (";", 0, isBase64 ? parts.size() - 1 : -1);
+    auto data = url.fromFirstOccurrenceOf (",", false, false);
+
+    if (isBase64)
+    {
+        MemoryBlock mb;
+        auto success = base64Decode(data, mb);
+        jassert (success);
+        ignoreUnused(success);
+
+        return mb;
+    }
+
+    MemoryOutputStream mo;
+    mo << addEscapeChars(data, false);
+    return mo.getMemoryBlock();
+}
+
+MemoryBlock URL::getURLEncodedData() const
+{
+    String ignore;
+    return getURLEncodedData(ignore);
+}
 
 URL::ParameterHandling URL::toHandling (bool usePostData)
 {

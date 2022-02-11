@@ -39,7 +39,11 @@
 #define JUCE_GRAPHICS_INCLUDE_COREGRAPHICS_HELPERS 1
 
 #include "juce_audio_processors.h"
-#include <juce_gui_extra/juce_gui_extra.h>
+
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra 
+ #include <juce_gui_extra/juce_gui_extra.h>
+#endif
+
 
 //==============================================================================
 #if JUCE_MAC
@@ -52,6 +56,9 @@
 #if (JUCE_PLUGINHOST_VST || JUCE_PLUGINHOST_VST3) && (JUCE_LINUX || JUCE_BSD)
  #include <X11/Xlib.h>
  #include <X11/Xutil.h>
+ #include <gtk/gtk.h>
+ #include <gtk/gtkx.h>
+ #include <glib/gmain.h>
  #include <sys/utsname.h>
  #undef KeyPress
 #endif
@@ -83,7 +90,7 @@ static bool arrayContainsPlugin (const OwnedArray<PluginDescription>& list,
 
 #endif
 
-#if JUCE_MAC
+#if JUCE_MAC && JUCE_MODULE_AVAILABLE_juce_gui_basics
 
 //==============================================================================
 /*  This is an NSViewComponent which holds a long-lived NSView which acts
@@ -188,9 +195,13 @@ private:
 #include "format_types/juce_LegacyAudioParameter.cpp"
 #include "processors/juce_AudioProcessor.cpp"
 #include "processors/juce_AudioPluginInstance.cpp"
-#include "processors/juce_AudioProcessorEditor.cpp"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+# include "processors/juce_AudioProcessorEditor.cpp"
+#endif
 #include "processors/juce_AudioProcessorGraph.cpp"
-#include "processors/juce_GenericAudioProcessorEditor.cpp"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+ #include "processors/juce_GenericAudioProcessorEditor.cpp"
+#endif
 #include "processors/juce_PluginDescription.cpp"
 #include "format_types/juce_LADSPAPluginFormat.cpp"
 #include "format_types/juce_VSTPluginFormat.cpp"
@@ -198,7 +209,9 @@ private:
 #include "format_types/juce_AudioUnitPluginFormat.mm"
 #include "scanning/juce_KnownPluginList.cpp"
 #include "scanning/juce_PluginDirectoryScanner.cpp"
-#include "scanning/juce_PluginListComponent.cpp"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+ #include "scanning/juce_PluginListComponent.cpp"
+#endif
 #include "processors/juce_AudioProcessorParameterGroup.cpp"
 #include "utilities/juce_AudioProcessorParameterWithID.cpp"
 #include "utilities/juce_RangedAudioParameter.cpp"
@@ -206,6 +219,34 @@ private:
 #include "utilities/juce_AudioParameterInt.cpp"
 #include "utilities/juce_AudioParameterBool.cpp"
 #include "utilities/juce_AudioParameterChoice.cpp"
-#include "utilities/juce_ParameterAttachments.cpp"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+ #include "utilities/juce_ParameterAttachments.cpp"
+#endif
 #include "utilities/juce_AudioProcessorValueTreeState.cpp"
 #include "utilities/juce_PluginHostType.cpp"
+
+#include "native/juce_NativeWebViewImpl.h"
+#include "utilities/juce_NativeWebView.cpp"
+
+#if JUCE_MAC
+ #include <WebKit/WebKit.h>
+ #include "native/juce_mac_NativeWebViewImpl.cpp"
+#elif JUCE_LINUX
+ #include <X11/Xlib.h>
+ #include <gtk/gtk.h>
+ #include <gtk/gtkx.h>
+ #include <glib/gmain.h>
+ #include <webkit2/webkit2.h>
+
+ #include "native/juce_linux_NativeWebViewImpl.cpp"
+#elif JUCE_WINDOWS
+ #if ! JUCE_MINGW && ! JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+  #pragma comment(lib, "windowsapp.Lib")
+ #endif
+ #include <objbase.h>
+ #include <winrt/Windows.Foundation.Collections.h>
+ #include <winrt/Windows.Foundation.h>
+ #include <winrt/Windows.Web.UI.Interop.h>
+
+ #include "native/juce_win_NativeWebViewImpl.cpp"
+#endif

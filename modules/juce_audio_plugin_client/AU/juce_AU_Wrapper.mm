@@ -87,7 +87,6 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #include <juce_audio_basics/native/juce_mac_CoreAudioLayouts.h>
 #include <juce_audio_processors/format_types/juce_LegacyAudioParameter.cpp>
 #include <juce_audio_processors/format_types/juce_AU_Shared.h>
-#include <juce_gui_extra/native/juce_mac_AudioProcessorWebView.h>
 
 //==============================================================================
 using namespace juce;
@@ -187,7 +186,6 @@ public:
         if (bypassParam != nullptr)
             bypassParam->removeListener (this);
 
-        deleteActiveEditors();
         juceFilter = nullptr;
         clearPresetsArray();
 
@@ -1465,238 +1463,6 @@ public:
     }
 
     //==============================================================================
-    class EditorCompHolder  : public Component
-    {
-    public:
-        EditorCompHolder (AudioProcessorEditor* const editor)
-        {
-            addAndMakeVisible (editor);
-
-           #if ! JucePlugin_EditorRequiresKeyboardFocus
-            setWantsKeyboardFocus (false);
-           #else
-            setWantsKeyboardFocus (true);
-           #endif
-
-            setBounds (getSizeToContainChild());
-
-            lastBounds = getBounds();
-        }
-
-        ~EditorCompHolder() override
-        {
-            deleteAllChildren(); // note that we can't use a std::unique_ptr because the editor may
-                                 // have been transferred to another parent which takes over ownership.
-        }
-
-        Rectangle<int> getSizeToContainChild()
-        {
-            if (auto* editor = getChildComponent (0))
-                return getLocalArea (editor, editor->getLocalBounds());
-
-            return {};
-        }
-
-        static NSView* createViewFor (AudioProcessor* filter, JuceAU* au, AudioProcessorEditor* const editor)
-        {
-            auto* editorCompHolder = new EditorCompHolder (editor);
-            auto r = convertToHostBounds (makeNSRect (editorCompHolder->getSizeToContainChild()));
-
-            static JuceUIViewClass cls;
-            auto* view = [[cls.createInstance() initWithFrame: r] autorelease];
-
-            JuceUIViewClass::setFilter (view, filter);
-            JuceUIViewClass::setAU (view, au);
-            JuceUIViewClass::setEditor (view, editorCompHolder);
-
-            [view setHidden: NO];
-            [view setPostsFrameChangedNotifications: YES];
-
-            [[NSNotificationCenter defaultCenter] addObserver: view
-                                                     selector: @selector (applicationWillTerminate:)
-                                                         name: NSApplicationWillTerminateNotification
-                                                       object: nil];
-            activeUIs.add (view);
-
-            editorCompHolder->addToDesktop (0, (void*) view);
-            editorCompHolder->setVisible (view);
-
-            return view;
-        }
-
-        void parentSizeChanged() override
-        {
-            resizeHostWindow();
-
-            if (auto* editor = getChildComponent (0))
-                editor->repaint();
-        }
-
-        void childBoundsChanged (Component*) override
-        {
-            auto b = getSizeToContainChild();
-
-            if (lastBounds != b)
-            {
-                lastBounds = b;
-                setSize (jmax (32, b.getWidth()), jmax (32, b.getHeight()));
-
-                resizeHostWindow();
-            }
-        }
-
-        bool keyPressed (const KeyPress&) override
-        {
-            if (getHostType().isAbletonLive())
-            {
-                static NSTimeInterval lastEventTime = 0; // check we're not recursively sending the same event
-                NSTimeInterval eventTime = [[NSApp currentEvent] timestamp];
-
-                if (lastEventTime != eventTime)
-                {
-                    lastEventTime = eventTime;
-
-                    NSView* view = (NSView*) getWindowHandle();
-                    NSView* hostView = [view superview];
-                    NSWindow* hostWindow = [hostView window];
-
-                    [hostWindow makeFirstResponder: hostView];
-                    [hostView keyDown: (NSEvent*) [NSApp currentEvent]];
-                    [hostWindow makeFirstResponder: view];
-                }
-            }
-
-            return false;
-        }
-
-        void resizeHostWindow()
-        {
-            [CATransaction begin];
-            [CATransaction setValue:(id) kCFBooleanTrue forKey:kCATransactionDisableActions];
-
-            auto rect = convertToHostBounds (makeNSRect (lastBounds));
-            auto* view = (NSView*) getWindowHandle();
-
-            auto superRect = [[view superview] frame];
-            superRect.size.width  = rect.size.width;
-            superRect.size.height = rect.size.height;
-
-            [[view superview] setFrame: superRect];
-            [view setFrame: rect];
-            [CATransaction commit];
-
-            [view setNeedsDisplay: YES];
-        }
-
-    private:
-        Rectangle<int> lastBounds;
-
-        JUCE_DECLARE_NON_COPYABLE (EditorCompHolder)
-    };
-
-    void deleteActiveEditors()
-    {
-        for (int i = activeUIs.size(); --i >= 0;)
-        {
-            id ui = (id) activeUIs.getUnchecked(i);
-
-            if (JuceUIViewClass::getAU (ui) == this)
-                JuceUIViewClass::deleteEditor (ui);
-        }
-    }
-
-    //==============================================================================
-    struct JuceUIViewClass  : public ObjCClass<NSView>
-    {
-        JuceUIViewClass()  : ObjCClass<NSView> ("JUCEAUView_")
-        {
-            addIvar<AudioProcessor*> ("filter");
-            addIvar<JuceAU*> ("au");
-            addIvar<EditorCompHolder*> ("editor");
-
-            addMethod (@selector (dealloc),                     dealloc);
-            addMethod (@selector (applicationWillTerminate:),   applicationWillTerminate);
-            addMethod (@selector (viewDidMoveToWindow),         viewDidMoveToWindow);
-            addMethod (@selector (mouseDownCanMoveWindow),      mouseDownCanMoveWindow);
-
-            registerClass();
-        }
-
-        static void deleteEditor (id self)
-        {
-            std::unique_ptr<EditorCompHolder> editorComp (getEditor (self));
-
-            if (editorComp != nullptr)
-            {
-                if (editorComp->getChildComponent(0) != nullptr
-                     && activePlugins.contains (getAU (self))) // plugin may have been deleted before the UI
-                {
-                    AudioProcessor* const filter = getIvar<AudioProcessor*> (self, "filter");
-                    filter->editorBeingDeleted ((AudioProcessorEditor*) editorComp->getChildComponent(0));
-                }
-
-                editorComp = nullptr;
-                setEditor (self, nullptr);
-            }
-        }
-
-        static JuceAU* getAU (id self)                          { return getIvar<JuceAU*> (self, "au"); }
-        static EditorCompHolder* getEditor (id self)            { return getIvar<EditorCompHolder*> (self, "editor"); }
-
-        static void setFilter (id self, AudioProcessor* filter) { object_setInstanceVariable (self, "filter", filter); }
-        static void setAU (id self, JuceAU* au)                 { object_setInstanceVariable (self, "au", au); }
-        static void setEditor (id self, EditorCompHolder* e)    { object_setInstanceVariable (self, "editor", e); }
-
-    private:
-        static void dealloc (id self, SEL)
-        {
-            if (activeUIs.contains (self))
-                shutdown (self);
-
-            sendSuperclassMessage<void> (self, @selector (dealloc));
-        }
-
-        static void applicationWillTerminate (id self, SEL, NSNotification*)
-        {
-            shutdown (self);
-        }
-
-        static void shutdown (id self)
-        {
-            [[NSNotificationCenter defaultCenter] removeObserver: self];
-            deleteEditor (self);
-
-            jassert (activeUIs.contains (self));
-            activeUIs.removeFirstMatchingValue (self);
-
-            if (activePlugins.size() + activeUIs.size() == 0)
-            {
-                // there's some kind of component currently modal, but the host
-                // is trying to delete our plugin..
-                jassert (Component::getCurrentlyModalComponent() == nullptr);
-
-                shutdownJuce_GUI();
-            }
-        }
-
-        static void viewDidMoveToWindow (id self, SEL)
-        {
-            if (NSWindow* w = [(NSView*) self window])
-            {
-                [w setAcceptsMouseMovedEvents: YES];
-
-                if (EditorCompHolder* const editorComp = getEditor (self))
-                    [w makeFirstResponder: (NSView*) editorComp->getWindowHandle()];
-            }
-        }
-
-        static BOOL mouseDownCanMoveWindow (id, SEL)
-        {
-            return NO;
-        }
-    };
-
-    //==============================================================================
     struct JuceUICreationClass  : public ObjCClass<NSObject>
     {
         JuceUICreationClass()  : ObjCClass<NSObject> ("JUCE_AUCocoaViewClass_")
@@ -1731,8 +1497,22 @@ public:
                     auto webConfig = filter->getEditorWebViewConfiguration();
                     if (! webConfig.url.isEmpty())
                     {
-                        auto view = createWebViewController(webConfig);
-                        return [view.release() autorelease];
+                        NSView* nativeView;
+
+                        {
+                            std::unique_ptr<NativeWebView> webview(new NativeWebView(nullptr, webConfig,
+                                                                                     [] (NativeWebView& view, int width, int height)
+                                                                                     {
+                                                                                         view.setBounds(juce::Rectangle<int>(0, 0, width, height));
+                                                                                     }));
+
+                            // transfer the ownership of the NativeWebView cpp object to the
+                            // NSView* itself
+                            nativeView = static_cast<NSView*>(NativeWebView::transferOwnershipToNativeView(std::move(webview)));
+                            [nativeView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
+                        }
+
+                        return nativeView;
                     }
                 }
             }

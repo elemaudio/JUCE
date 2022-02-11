@@ -208,7 +208,7 @@ inline NSUniquePtr<NSObject> varToNSObject(const var& v)
     if (v.isMethod()){
         jassertfalse;
     }
-    
+
     jassertfalse;
     return {};
 }

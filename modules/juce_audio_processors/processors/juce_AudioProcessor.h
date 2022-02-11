@@ -928,6 +928,7 @@ public:
     */
     virtual void setNonRealtime (bool isNonRealtime) noexcept;
 
+   #if JUCE_MODULE_AVAILABLE_juce_gui_extra
     //==============================================================================
     /** Creates the processor's GUI.
 
@@ -963,9 +964,6 @@ public:
         @see createEditor
     */
     virtual bool hasEditor() const = 0;
-    
-    //==============================================================================
-    virtual WebViewConfiguration getEditorWebViewConfiguration();
 
     //==============================================================================
     /** Returns the active editor, if there is one. Bear in mind this can return nullptr
@@ -980,6 +978,10 @@ public:
         This may call createEditor() internally to create the component.
     */
     AudioProcessorEditor* createEditorIfNeeded();
+   #endif
+
+    //==============================================================================
+    virtual WebViewConfiguration getEditorWebViewConfiguration();
 
     //==============================================================================
     /** Returns the default number of steps for a parameter.
@@ -1192,8 +1194,10 @@ public:
     virtual CurveData getResponseCurve (CurveData::Type /*curveType*/) const      { return {}; }
 
     //==============================================================================
+   #if JUCE_MODULE_AVAILABLE_juce_gui_extra
     /** Not for public use - this is called before deleting an editor component. */
     void editorBeingDeleted (AudioProcessorEditor*) noexcept;
+   #endif
 
     /** Flags to indicate the type of plugin context in which a processor is being used. */
     enum WrapperType
@@ -1466,7 +1470,9 @@ private:
 
     //==============================================================================
     Array<AudioProcessorListener*> listeners;
+   #if JUCE_MODULE_AVAILABLE_juce_gui_extra
     Component::SafePointer<AudioProcessorEditor> activeEditor;
+   #endif
     double currentSampleRate = 0;
     int blockSize = 0, latencySamples = 0;
     bool suspended = false;

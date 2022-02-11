@@ -61,7 +61,6 @@ public:
             Thread::setCurrentThreadName ("JUCE Plugin Message Thread");
 
             MessageManager::getInstance()->setCurrentThreadAsMessageThread();
-            XWindowSystem::getInstance();
 
             threadInitialised.signal();
 

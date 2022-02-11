@@ -200,14 +200,6 @@ public:
         ObjCMsgSendSuper<AUAudioUnit, void> (getAudioUnit(), @selector (deallocateRenderResources));
     }
 
-    //==============================================================================
-   #if JUCE_AUV3_VIEW_CONFIG_SUPPORTED
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wunguarded-availability", "-Wunguarded-availability-new")
-    virtual NSIndexSet* getSupportedViewConfigurations (NSArray<AUAudioUnitViewConfiguration*>*) = 0;
-    virtual void selectViewConfiguration (AUAudioUnitViewConfiguration*) = 0;
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-   #endif
-
 private:
     struct Class  : public ObjCClass<AUAudioUnit>
     {
@@ -270,15 +262,6 @@ private:
             //==============================================================================
             addMethod (@selector (contextName),                     getContextName);
             addMethod (@selector (setContextName:),                 setContextName);
-
-            //==============================================================================
-           #if JUCE_AUV3_VIEW_CONFIG_SUPPORTED
-            if (@available (macOS 10.13, iOS 11.0, *))
-            {
-                addMethod (@selector (supportedViewConfigurations:),    getSupportedViewConfigurations);
-                addMethod (@selector (selectViewConfiguration:),        selectViewConfiguration);
-            }
-           #endif
 
             registerClass();
         }
@@ -385,14 +368,6 @@ private:
         //==============================================================================
         static NSString* getContextName (id self, SEL)                                              { return _this (self)->getContextName(); }
         static void setContextName (id self, SEL, NSString* str)                                    { return _this (self)->setContextName (str); }
-
-        //==============================================================================
-       #if JUCE_AUV3_VIEW_CONFIG_SUPPORTED
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wunguarded-availability", "-Wunguarded-availability-new")
-        static NSIndexSet* getSupportedViewConfigurations (id self, SEL, NSArray<AUAudioUnitViewConfiguration*>* configs) { return _this (self)->getSupportedViewConfigurations (configs); }
-        static void selectViewConfiguration (id self, SEL, AUAudioUnitViewConfiguration* config)                          { _this (self)->selectViewConfiguration (config); }
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-       #endif
     };
 
     static JuceAudioUnitv3Base* create (AUAudioUnit*, AudioComponentDescription, AudioComponentInstantiationOptions, NSError**);
@@ -440,8 +415,6 @@ public:
 
         if (bypassParam != nullptr)
             bypassParam->removeListener (this);
-
-        removeEditor (processor);
 
         if (editorObserverToken != nullptr)
         {
@@ -891,48 +864,6 @@ public:
         JuceAudioUnitv3Base::deallocateRenderResources();
     }
 
-    //==============================================================================
-   #if JUCE_AUV3_VIEW_CONFIG_SUPPORTED
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wunguarded-availability", "-Wunguarded-availability-new")
-    NSIndexSet* getSupportedViewConfigurations (NSArray<AUAudioUnitViewConfiguration*>* configs) override
-    {
-        auto supportedViewIndecies = [[NSMutableIndexSet alloc] init];
-        auto n = [configs count];
-
-        if (auto* editor = getAudioProcessor().createEditorIfNeeded())
-        {
-            // If you hit this assertion then your plug-in's editor is reporting that it doesn't support
-            // any host MIDI controller configurations!
-            jassert (editor->supportsHostMIDIControllerPresence (true) || editor->supportsHostMIDIControllerPresence (false));
-
-            for (auto i = 0u; i < n; ++i)
-            {
-                if (auto viewConfiguration = [configs objectAtIndex: i])
-                {
-                    if (editor->supportsHostMIDIControllerPresence ([viewConfiguration hostHasController] == YES))
-                    {
-                        auto* constrainer = editor->getConstrainer();
-                        auto height = (int) [viewConfiguration height];
-                        auto width  = (int) [viewConfiguration width];
-
-                        if (height <= constrainer->getMaximumHeight() && height >= constrainer->getMinimumHeight()
-                         && width  <= constrainer->getMaximumWidth()  && width  >= constrainer->getMinimumWidth())
-                            [supportedViewIndecies addIndex: i];
-                    }
-                }
-            }
-        }
-
-        return [supportedViewIndecies autorelease];
-    }
-
-    void selectViewConfiguration (AUAudioUnitViewConfiguration* config) override
-    {
-        processorHolder->viewConfiguration.reset (new AudioProcessorHolder::ViewConfig { [config width], [config height], [config hostHasController] == YES });
-    }
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-   #endif
-
     struct ScopedKeyChange
     {
         ScopedKeyChange (AUAudioUnit* a, NSString* k)
@@ -1091,18 +1022,6 @@ public:
             lastAudioHead = info;
 
         return true;
-    }
-
-    //==============================================================================
-    static void removeEditor (AudioProcessor& processor)
-    {
-        ScopedLock editorLock (processor.getCallbackLock());
-
-        if (AudioProcessorEditor* editor = processor.getActiveEditor())
-        {
-            processor.editorBeingDeleted (editor);
-            delete editor;
-        }
     }
 
 private:
@@ -1411,11 +1330,8 @@ private:
         [paramTree.get() setImplementorStringFromValueCallback: stringFromValueProvider];
         [paramTree.get() setImplementorValueFromStringCallback: valueFromStringProvider];
 
-        if (processor.hasEditor())
-        {
-            editorParamObserver = CreateObjCBlock (this, &JuceAudioUnitv3::valueChangedForObserver);
-            editorObserverToken = [paramTree.get() tokenByAddingParameterObserver: editorParamObserver];
-        }
+        editorParamObserver = CreateObjCBlock (this, &JuceAudioUnitv3::valueChangedForObserver);
+        editorObserverToken = [paramTree.get() tokenByAddingParameterObserver: editorParamObserver];
 
         if ((bypassParam = processor.getBypassParameter()) != nullptr)
             bypassParam->addListener (this);
@@ -1857,9 +1773,6 @@ public:
     ~JuceAUViewController()
     {
         JUCE_ASSERT_MESSAGE_THREAD
-
-        if (processorHolder.get() != nullptr)
-            JuceAudioUnitv3::removeEditor (getAudioProcessor());
     }
 
     //==============================================================================
@@ -1871,58 +1784,25 @@ public:
         {
             processorHolder = new AudioProcessorHolder (p);
             auto& processor = getAudioProcessor();
+            auto webConfig = processor.getEditorWebViewConfiguration();
 
-            if (processor.hasEditor())
+            if (! webConfig.url.isEmpty())
             {
-                if (AudioProcessorEditor* editor = processor.createEditorIfNeeded())
+                NSView* nativeView;
+
                 {
-                    preferredSize = editor->getBounds();
+                    std::unique_ptr<NativeWebView> webview(new NativeWebView(nullptr, webConfig,
+                                                                             [] (NativeWebView& view, int width, int height)
+                                                                             {
+                                                                                 view.setBounds(juce::Rectangle<int>(0, 0, width, height));
+                                                                             }));
 
-                    JUCE_IOS_MAC_VIEW* view = [[[JUCE_IOS_MAC_VIEW alloc] initWithFrame: convertToCGRect (editor->getBounds())] autorelease];
-                    [myself setView: view];
-
-                   #if JUCE_IOS
-                    editor->setVisible (false);
-                   #else
-                    editor->setVisible (true);
-                   #endif
-
-                    editor->addToDesktop (0, view);
-
-                   #if JUCE_IOS
-                    if (JUCE_IOS_MAC_VIEW* peerView = [[[myself view] subviews] objectAtIndex: 0])
-                        [peerView setContentMode: UIViewContentModeTop];
-
-                    if (auto* peer = dynamic_cast<UIViewPeerControllerReceiver*> (editor->getPeer()))
-                        peer->setViewController (myself);
-                   #endif
+                    // transfer the ownership of the NativeWebView cpp object to the
+                    // NSView* itself
+                    nativeView = static_cast<NSView*>(NativeWebView::transferOwnershipToNativeView(std::move(webview)));
+                    [nativeView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
                 }
-            }
-        }
-    }
-
-    void viewDidLayoutSubviews()
-    {
-        if (auto holder = processorHolder.get())
-        {
-            if ([myself view] != nullptr)
-            {
-                if (AudioProcessorEditor* editor = getAudioProcessor().getActiveEditor())
-                {
-                    if (holder->viewConfiguration != nullptr)
-                        editor->hostMIDIControllerIsAvailable (holder->viewConfiguration->hostHasMIDIController);
-
-                    editor->setBounds (convertToRectInt ([[myself view] bounds]));
-
-                    if (JUCE_IOS_MAC_VIEW* peerView = [[[myself view] subviews] objectAtIndex: 0])
-                    {
-                       #if JUCE_IOS
-                        [peerView setNeedsDisplay];
-                       #else
-                        [peerView setNeedsDisplay: YES];
-                       #endif
-                    }
-                }
+                [myself setView: nativeView];
             }
         }
     }
@@ -1936,22 +1816,10 @@ public:
 
     void viewDidAppear (bool)
     {
-        if (processorHolder.get() != nullptr)
-            if (AudioProcessorEditor* editor = getAudioProcessor().getActiveEditor())
-                editor->setVisible (true);
     }
 
     void viewDidDisappear (bool)
     {
-        if (processorHolder.get() != nullptr)
-            if (AudioProcessorEditor* editor = getAudioProcessor().getActiveEditor())
-                editor->setVisible (false);
-    }
-
-    CGSize getPreferredContentSize() const
-    {
-        return CGSizeMake (static_cast<float> (preferredSize.getWidth()),
-                           static_cast<float> (preferredSize.getHeight()));
     }
 
     //==============================================================================
@@ -2019,7 +1887,6 @@ private:
     //==============================================================================
     AUViewController<AUAudioUnitFactory>* myself;
     LockedProcessorHolder processorHolder;
-    Rectangle<int> preferredSize { 1, 1 };
 
     //==============================================================================
     AudioProcessor& getAudioProcessor() const noexcept       { return **processorHolder.get(); }
@@ -2038,12 +1905,6 @@ private:
 - (instancetype) initWithNibName: (nullable NSString*) nib bundle: (nullable NSBundle*) bndl { self = [super initWithNibName: nib bundle: bndl]; cpp.reset (new JuceAUViewController (self)); return self; }
 - (void) loadView                { cpp->loadView(); }
 - (AUAudioUnit *) createAudioUnitWithComponentDescription: (AudioComponentDescription) desc error: (NSError **) error { return cpp->createAudioUnit (desc, error); }
-- (CGSize) preferredContentSize  { return cpp->getPreferredContentSize(); }
-
-// NSViewController and UIViewController have slightly different names for this function
-- (void) viewDidLayoutSubviews   { cpp->viewDidLayoutSubviews(); }
-- (void) viewDidLayout           { cpp->viewDidLayoutSubviews(); }
-
 - (void) didReceiveMemoryWarning { cpp->didReceiveMemoryWarning(); }
 #if JUCE_IOS
 - (void) viewDidAppear: (BOOL) animated { cpp->viewDidAppear (animated); [super viewDidAppear:animated]; }

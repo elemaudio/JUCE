@@ -93,20 +93,7 @@ namespace juce
 
 using namespace Steinberg;
 
-Vst::EditorView* createVST3WebView(WebViewConfiguration &&, Vst::EditController*, AudioProcessor&, ViewRect&);
-
 //==============================================================================
-#if JUCE_MAC
- extern void initialiseMacVST();
-
- #if ! JUCE_64BIT
-  extern void updateEditorCompBoundsVST (Component*);
- #endif
-
- extern JUCE_API void* attachComponentToWindowRefVST (Component*, void* parentWindowOrView, bool isNSView);
- extern JUCE_API void detachComponentFromWindowRefVST (Component*, void* nsWindow, bool isNSView);
-#endif
-
 #if JUCE_WINDOWS && JUCE_WIN_PER_MONITOR_DPI_AWARE
  extern JUCE_API double getScaleFactorForWindow (HWND);
 #endif
@@ -636,6 +623,119 @@ static void setValueAndNotifyIfChanged (AudioProcessorParameter& param, float ne
     const InParameterChangedCallbackSetter scopedSetter { inParameterChangedCallback };
     param.setValueNotifyingHost (newValue);
 }
+
+//==============================================================================
+class WebViewEditor  : public Vst::EditorView
+{
+public:
+    WebViewEditor (WebViewConfiguration && webConfig, Vst::EditController* ec, ViewRect& webViewBounds)
+        : Vst::EditorView (ec, &webViewBounds),
+          webViewConfig (std::move(webConfig)),
+          currentBounds(webViewBounds)
+    {}
+
+    REFCOUNT_METHODS (Vst::EditorView)
+
+    //==============================================================================
+    tresult PLUGIN_API isPlatformTypeSupported (FIDString type) override
+    {
+        if (type != nullptr && (! webViewConfig.url.isEmpty()))
+        {
+#if JUCE_LINUX
+            if (strcmp (type, kPlatformTypeX11EmbedWindowID) == 0)
+#elif JUCE_WINDOWS
+            if (strcmp (type, kPlatformTypeHWND) == 0)
+#elif JUCE_MAC
+            if (strcmp (type, kPlatformTypeNSView) == 0)
+#endif
+                return kResultTrue;
+        }
+
+        return kResultFalse;
+    }
+
+    tresult PLUGIN_API attached (void* parent, FIDString type) override
+    {
+        if (parent == nullptr || isPlatformTypeSupported (type) == kResultFalse)
+            return kResultFalse;
+
+        if (webView != nullptr)
+            removed();
+
+         webView = std::make_unique<NativeWebView>(parent, webViewConfig,
+                                                   [this] (NativeWebView&, int w, int h)
+                                                   {
+                                                       if (plugFrame != nullptr) {
+                                                           ViewRect rc (0, 0, w, h);
+                                                           plugFrame->resizeView(this, &rc);
+                                                       }
+                                                   });
+
+
+        return kResultTrue;
+    }
+
+    tresult PLUGIN_API removed() override
+    {
+        if (webView != nullptr) {
+            webView = nullptr;
+        }
+
+        return CPluginView::removed();
+    }
+
+    tresult PLUGIN_API onSize (ViewRect* rc) override
+    {
+        if (rc != nullptr) {
+            if (webView != nullptr) {
+                Rectangle<int> bounds(0, 0, rc->getWidth(), rc->getHeight());
+                webView->setBounds(bounds);
+            }
+
+            currentBounds = *rc;
+            return kResultTrue;
+        }
+        return kResultFalse;
+    }
+
+    tresult PLUGIN_API getSize (ViewRect* size) override
+    {
+        if (size != nullptr)
+        {
+            if (webView != nullptr) {
+                auto rc = webView->getBounds();
+                *size = currentBounds = ViewRect(rc.getX(), rc.getY(), rc.getRight(), rc.getBottom());
+            } else {
+                *size = currentBounds;
+            }
+
+            return kResultTrue;
+        }
+
+
+        return kResultFalse;
+    }
+
+    tresult PLUGIN_API canResize() override
+    {
+        return kResultTrue;
+    }
+
+    tresult PLUGIN_API checkSizeConstraint (ViewRect* /*rectToCheck*/) override
+    {
+        return kResultTrue;
+    }
+
+private:
+
+    //==============================================================================
+    WebViewConfiguration webViewConfig;
+    std::unique_ptr<NativeWebView> webView;
+    ViewRect currentBounds;
+
+    //==============================================================================
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebViewEditor)
+};
 
 //==============================================================================
 class JuceVST3EditController : public Vst::EditController,
@@ -1168,8 +1268,8 @@ public:
 
             if (mayCreateEditor) {
                 ViewRect rc (0, 0, webConfig.size.getWidth(), webConfig.size.getHeight());
-                
-                return createVST3WebView (std::move(webConfig), this, *audioProcessor->get(), rc);
+
+                return new WebViewEditor (std::move(webConfig), this, rc);
             }
         }
 
@@ -2884,7 +2984,9 @@ bool initModule();
 bool initModule()
 {
    #if JUCE_MAC
-    initialiseMacVST();
+    #if ! JUCE_64BIT
+     NSApplicationLoad();
+    #endif
    #endif
 
     return true;

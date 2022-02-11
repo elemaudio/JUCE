@@ -157,8 +157,6 @@
   #include "native/juce_mac_WebBrowserComponent.mm"
  #endif
 
-#include "native/juce_mac_AudioProcessorWebView.mm"
-
 //==============================================================================
 #elif JUCE_WINDOWS
  #include "native/juce_win32_ActiveXComponent.cpp"

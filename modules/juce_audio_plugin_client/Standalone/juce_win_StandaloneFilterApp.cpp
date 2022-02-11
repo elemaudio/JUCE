@@ -23,4 +23,17 @@
   ==============================================================================
 */
 
-#include "VST3/juce_VST3_MacWebViewEditor.cpp"
+#include <juce_core/system/juce_TargetPlatform.h>
+#include "../utility/juce_CheckSettingMacros.h"
+
+#include "../utility/juce_IncludeSystemHeaders.h"
+#include "../utility/juce_IncludeModuleHeaders.h"
+
+#include <windows.h>
+
+using namespace juce;
+
+int APIENTRY WinMain(HINSTANCE /*hInst*/, HINSTANCE /*hInstPrev*/, PSTR /*cmdline*/, int /*cmdshow*/)
+{
+    return MessageBox(NULL, "Standalone Plug-In App currently not implemented for Windows yet!", "caption", 0);
+}

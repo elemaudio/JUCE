@@ -3,9 +3,9 @@
 <JUCERPROJECT name="GainPlugin" companyName="JUCE" version="1.0.0" userNotes="Gain audio plugin."
               companyWebsite="http://juce.com" displaySplashScreen="1" defines="PIP_JUCE_EXAMPLES_DIRECTORY=L1VzZXJzL2ZyODEwL0RldmVsb3BtZW50L0pVQ0UvZXhhbXBsZXM="
               projectType="audioplug" pluginAUIsSandboxSafe="1" pluginManufacturer="JUCE"
-              pluginFormats="buildVST3,buildAU,buildStandalone" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="1" id="YC8BqY" jucerFormatVersion="1"
-              cppLanguageStandard="17">
+              pluginFormats="buildAU,buildAUv3,buildStandalone,buildVST,buildVST3"
+              useAppConfig="0" addUsingNamespaceToJuceHeader="1" id="YC8BqY"
+              jucerFormatVersion="1" cppLanguageStandard="17">
   <MAINGROUP id="LN3PHk" name="GainPlugin">
     <GROUP id="{E90419D9-09DD-C1B3-77DD-87834933514A}" name="Source">
       <FILE id="VDVaZ8" name="Main.cpp" compile="1" resource="0" file="Source/Main.cpp"/>
@@ -15,60 +15,46 @@
   </MAINGROUP>
   <MODULES>
     <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0"
             useGlobalPath="1"/>
     <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
   </MODULES>
   <EXPORTFORMATS>
-    <XCODE_MAC targetFolder="Builds/MacOSX">
+    <XCODE_MAC targetFolder="Builds/MacOSX" appSandbox="1" appSandboxInheritance="1"
+               appSandboxOptions="com.apple.security.network.client,com.apple.security.network.server">
       <CONFIGURATIONS>
         <CONFIGURATION name="Debug" isDebug="1" optimisation="1" targetName="GainPlugin"/>
         <CONFIGURATION name="Release" isDebug="0" optimisation="3" targetName="GainPlugin"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_audio_basics" path=""/>
-        <MODULEPATH id="juce_audio_devices" path=""/>
-        <MODULEPATH id="juce_audio_formats" path=""/>
         <MODULEPATH id="juce_audio_plugin_client" path=""/>
         <MODULEPATH id="juce_audio_processors" path=""/>
-        <MODULEPATH id="juce_audio_utils" path=""/>
         <MODULEPATH id="juce_core" path=""/>
         <MODULEPATH id="juce_data_structures" path=""/>
         <MODULEPATH id="juce_events" path=""/>
         <MODULEPATH id="juce_graphics" path=""/>
-        <MODULEPATH id="juce_gui_basics" path=""/>
-        <MODULEPATH id="juce_gui_extra" path=""/>
       </MODULEPATHS>
     </XCODE_MAC>
-    <VS2019 targetFolder="Builds/VisualStudio2019">
+    <VS2022 targetFolder="Builds/VisualStudio2022">
       <CONFIGURATIONS>
-        <CONFIGURATION name="Debug" isDebug="1" optimisation="1" targetName="GainPlugin"/>
-        <CONFIGURATION name="Release" isDebug="0" optimisation="3" targetName="GainPlugin"/>
+        <CONFIGURATION isDebug="1" name="Debug"/>
+        <CONFIGURATION isDebug="0" name="Release"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_audio_basics" path=""/>
-        <MODULEPATH id="juce_audio_devices" path=""/>
-        <MODULEPATH id="juce_audio_formats" path=""/>
-        <MODULEPATH id="juce_audio_plugin_client" path=""/>
-        <MODULEPATH id="juce_audio_processors" path=""/>
-        <MODULEPATH id="juce_audio_utils" path=""/>
-        <MODULEPATH id="juce_core" path=""/>
-        <MODULEPATH id="juce_data_structures" path=""/>
-        <MODULEPATH id="juce_events" path=""/>
-        <MODULEPATH id="juce_graphics" path=""/>
-        <MODULEPATH id="juce_gui_basics" path=""/>
-        <MODULEPATH id="juce_gui_extra" path=""/>
+        <MODULEPATH id="juce_audio_basics" path="C:\Users\fr810\source\repos\JUCE\modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="C:\Users\fr810\source\repos\JUCE\modules"/>
+        <MODULEPATH id="juce_audio_processors" path="C:\Users\fr810\source\repos\JUCE\modules"/>
+        <MODULEPATH id="juce_core" path="C:\Users\fr810\source\repos\JUCE\modules"/>
+        <MODULEPATH id="juce_data_structures" path="C:\Users\fr810\source\repos\JUCE\modules"/>
+        <MODULEPATH id="juce_events" path="C:\Users\fr810\source\repos\JUCE\modules"/>
+        <MODULEPATH id="juce_graphics" path="C:\Users\fr810\source\repos\JUCE\modules"/>
       </MODULEPATHS>
-    </VS2019>
+    </VS2022>
   </EXPORTFORMATS>
   <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_VST3_CAN_REPLACE_VST2="0"/>
 </JUCERPROJECT>

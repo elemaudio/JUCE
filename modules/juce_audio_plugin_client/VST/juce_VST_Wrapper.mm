@@ -74,14 +74,6 @@ static bool shouldManuallyCloseHostWindow()
 #endif
 
 //==============================================================================
-JUCE_API void initialiseMacVST();
-void initialiseMacVST()
-{
-   #if ! JUCE_64BIT
-    NSApplicationLoad();
-   #endif
-}
-
 JUCE_API void* attachComponentToWindowRefVST (Component* comp, void* parentWindowOrView, bool isNSView);
 void* attachComponentToWindowRefVST (Component* comp, void* parentWindowOrView, bool isNSView)
 {

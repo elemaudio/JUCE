@@ -42,9 +42,10 @@
   license:            GPL/Commercial
   minimumCppStandard: 14
 
-  dependencies:       juce_gui_extra, juce_audio_basics
-  OSXFrameworks:      CoreAudio CoreMIDI AudioToolbox
+  dependencies:       juce_graphics, juce_audio_basics, juce_data_structures
+  OSXFrameworks:      CoreAudio CoreMIDI AudioToolbox WebKit
   iOSFrameworks:      AudioToolbox
+  mingwLibs:          windowsapp
 
  END_JUCE_MODULE_DECLARATION
 
@@ -54,9 +55,9 @@
 #pragma once
 #define JUCE_AUDIO_PROCESSORS_H_INCLUDED
 
-#include <juce_gui_basics/juce_gui_basics.h>
-#include <juce_gui_extra/juce_gui_extra.h>
+#include <juce_graphics/juce_graphics.h>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_data_structures/juce_data_structures.h>
 
 //==============================================================================
 /** Config: JUCE_PLUGINHOST_VST
@@ -120,17 +121,22 @@
 #include "utilities/juce_VSTCallbackHandler.h"
 #include "utilities/juce_VST3ClientExtensions.h"
 #include "utilities/juce_ExtensionsVisitor.h"
+#include "utilities/juce_WebViewConfiguration.h"
 #include "processors/juce_AudioProcessorParameter.h"
 #include "processors/juce_HostedAudioProcessorParameter.h"
-#include "processors/juce_AudioProcessorEditorHostContext.h"
-#include "processors/juce_AudioProcessorEditor.h"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+ #include "processors/juce_AudioProcessorEditorHostContext.h"
+ #include "processors/juce_AudioProcessorEditor.h"
+#endif
 #include "processors/juce_AudioProcessorListener.h"
 #include "processors/juce_AudioProcessorParameterGroup.h"
 #include "processors/juce_AudioProcessor.h"
 #include "processors/juce_PluginDescription.h"
 #include "processors/juce_AudioPluginInstance.h"
 #include "processors/juce_AudioProcessorGraph.h"
-#include "processors/juce_GenericAudioProcessorEditor.h"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+ #include "processors/juce_GenericAudioProcessorEditor.h"
+#endif
 #include "format/juce_AudioPluginFormat.h"
 #include "format/juce_AudioPluginFormatManager.h"
 #include "scanning/juce_KnownPluginList.h"
@@ -140,13 +146,18 @@
 #include "format_types/juce_VSTPluginFormat.h"
 #include "format_types/juce_VST3PluginFormat.h"
 #include "scanning/juce_PluginDirectoryScanner.h"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
 #include "scanning/juce_PluginListComponent.h"
+#endif
 #include "utilities/juce_AudioProcessorParameterWithID.h"
 #include "utilities/juce_RangedAudioParameter.h"
 #include "utilities/juce_AudioParameterFloat.h"
 #include "utilities/juce_AudioParameterInt.h"
 #include "utilities/juce_AudioParameterBool.h"
 #include "utilities/juce_AudioParameterChoice.h"
-#include "utilities/juce_ParameterAttachments.h"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+ #include "utilities/juce_ParameterAttachments.h"
+#endif
 #include "utilities/juce_AudioProcessorValueTreeState.h"
 #include "utilities/juce_PluginHostType.h"
+#include "utilities/juce_NativeWebView.h"

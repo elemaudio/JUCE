@@ -52,6 +52,11 @@ public:
     /** Creates URL referring to a local file on your disk using the file:// scheme. */
     explicit URL (File localFile);
 
+    /** Creates URL which holds data directly enconded in the URL using the data://
+        scheme (see, for example, https://en.wikipedia.org/wiki/Data_URI_scheme)
+     */
+    explicit URL (MemoryBlock const& data, String const& mimeType = {});
+
     /** Destructor. */
     ~URL() = default;
 
@@ -123,6 +128,18 @@ public:
         @see isLocalFile
     */
     File getLocalFile() const;
+
+    /** Returns true if the URL encodes data directly */
+    bool isDataScheme() const;
+
+    /** Returns the data which is directly encoded inside the URL via the data:// URL
+        scheme (see https://en.wikipedia.org/wiki/Data_URI_scheme). Also returns the
+        mime type of the data.
+    */
+    MemoryBlock getURLEncodedData (String& mimeType) const;
+
+    /** Same as the above but without the mimeType argument. */
+    MemoryBlock getURLEncodedData() const;
 
     /** Returns the file name.
 

@@ -22,19 +22,4 @@
 
   ==============================================================================
 */
-
-#include <juce_core/system/juce_TargetPlatform.h>
-
-#if JucePlugin_Build_Standalone
-
-#if JUCE_MAC
- #include "Standalone/juce_mac_StandaloneFilterApp.cpp"
-#elif JUCE_WINDOWS
- #include "Standalone/juce_win_StandaloneFilterApp.cpp"
-#elif JUCE_LINUX
- #include "Standalone/juce_linux_StandaloneFilterApp.cpp"
-#else
- #error Unsupported platform
-#endif
-
-#endif
+#include "juce_audio_plugin_client_Standalone.cpp"

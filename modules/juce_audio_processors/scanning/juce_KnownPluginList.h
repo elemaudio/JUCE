@@ -136,6 +136,7 @@ public:
         sortByInfoUpdateTime
     };
 
+   #if JUCE_MODULE_AVAILABLE_juce_gui_extra
     //==============================================================================
     /** Adds the plug-in types to a popup menu so that the user can select one.
 
@@ -152,6 +153,7 @@ public:
         @see addToMenu
     */
     static int getIndexChosenByMenu (const Array<PluginDescription>& types, int menuResultCode);
+   #endif
 
     //==============================================================================
     /** Sorts the list. */
@@ -220,10 +222,12 @@ public:
     [[deprecated]] PluginDescription** end() noexcept                          { jassertfalse; return nullptr; }
     [[deprecated]] PluginDescription* const* end() const noexcept              { jassertfalse; return nullptr; }
 
-    // These methods have been deprecated in favour of their static counterparts. You should call getTypes()
-    // to store the plug-in list at a point in time and use it when calling these methods.
-    [[deprecated]] void addToMenu (PopupMenu& menu, SortMethod sortMethod, const String& currentlyTickedPluginID = {}) const;
-    [[deprecated]] int getIndexChosenByMenu (int menuResultCode) const;
+    #if JUCE_MODULE_AVAILABLE_juce_gui_extra
+     // These methods have been deprecated in favour of their static counterparts. You should call getTypes()
+     // to store the plug-in list at a point in time and use it when calling these methods.
+     [[deprecated]] void addToMenu (PopupMenu& menu, SortMethod sortMethod, const String& currentlyTickedPluginID = {}) const;
+     [[deprecated]] int getIndexChosenByMenu (int menuResultCode) const;
+    #endif
     [[deprecated]] std::unique_ptr<PluginTree> createTree (const SortMethod sortMethod) const;
    #endif
 

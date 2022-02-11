@@ -85,13 +85,41 @@ public:
     AudioProcessorParameter* getBypassParameter() const override { return bypass; }
 
     //==============================================================================
-    AudioProcessorEditor* createEditor() override          { return nullptr; }
-    bool hasEditor() const override                        { return false;   }
     WebViewConfiguration getEditorWebViewConfiguration() override
     {
         WebViewConfiguration config;
-        
-        config.url = URL("file:///Users/fr810/Development/JUCE/examples/GainPlugin/plugin.html");
+
+        static constexpr char htmlPage[] = R"END(
+            <html style="background-color:#33475b">
+                <body>
+                    <center>
+            <script>
+                function juceBridgeOnMessage(message) {
+                    var args = message.split("@");
+                    var paramId = args[0];
+                    var value = Number(args[1]);
+                    
+                    if (paramId == "gain")        { document.getElementById("gain").value = value * 100.; }
+                    else if (paramId == "bypass") { document.getElementById("bypass").checked = value; }
+                }
+                
+                window.onload = function () {
+                    juceBridge.postMessage("update");
+                }
+            </script>
+            <input type="checkbox" id="bypass" name="bypass" onchange="juceBridge.postMessage('param@bypass@' + (this.checked ? '1' : '0'))"/>
+            <label for="bypass">Bypass</label><br/>
+            <input type="range" id="gain" value = "0" name="gain" min="0" max="100" oninput="juceBridge.postMessage('param@gain@' + (this.value / 100.))"/>
+            <label for="range">Gain</label><br/>
+            <button name = "button" value = "Resize" type = "button" onclick="juceBridge.resizeTo(800, 400)">Resize!</button>
+            </center>
+            </body>
+            </html>
+            )END";
+
+        MemoryBlock htmlPageData(htmlPage, sizeof(htmlPage));
+    
+        config.url = URL(htmlPageData, "text/html");
         config.size = Rectangle<int>(0, 0, 200, 100);
         config.onMessageReceived
             = [this] (String const& v)
@@ -176,7 +204,7 @@ private:
         }
     }
     
-    void parameterValueChanged (int parameterIndex, float newValue) override {
+    void parameterValueChanged (int /*parameterIndex*/, float /*newValue*/) override {
         triggerAsyncUpdate();
     }
     

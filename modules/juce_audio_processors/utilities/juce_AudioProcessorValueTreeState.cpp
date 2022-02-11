@@ -496,6 +496,7 @@ std::unique_ptr<Attachment> makeAttachment (const AudioProcessorValueTreeState& 
     return nullptr;
 }
 
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
 AudioProcessorValueTreeState::SliderAttachment::SliderAttachment (AudioProcessorValueTreeState& stateToUse,
                                                                   const String& parameterID,
                                                                   Slider& slider)
@@ -516,6 +517,7 @@ AudioProcessorValueTreeState::ButtonAttachment::ButtonAttachment (AudioProcessor
     : attachment (makeAttachment<ButtonParameterAttachment> (stateToUse, parameterID, button))
 {
 }
+#endif
 
 //==============================================================================
 //==============================================================================

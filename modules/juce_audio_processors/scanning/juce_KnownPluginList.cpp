@@ -521,6 +521,7 @@ struct PluginTreeUtils
         return false;
     }
 
+   #if JUCE_MODULE_AVAILABLE_juce_gui_extra
     static bool addToMenu (const KnownPluginList::PluginTree& tree, PopupMenu& m,
                            const Array<PluginDescription>& allPlugins,
                            const String& currentlyTickedPluginID)
@@ -566,6 +567,7 @@ struct PluginTreeUtils
 
         return isTicked;
     }
+   #endif
 };
 
 std::unique_ptr<KnownPluginList::PluginTree> KnownPluginList::createTree (const Array<PluginDescription>& types, SortMethod sortMethod)
@@ -595,6 +597,7 @@ std::unique_ptr<KnownPluginList::PluginTree> KnownPluginList::createTree (const 
 }
 
 //==============================================================================
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
 void KnownPluginList::addToMenu (PopupMenu& menu, const Array<PluginDescription>& types, SortMethod sortMethod,
                                  const String& currentlyTickedPluginID)
 {
@@ -607,6 +610,7 @@ int KnownPluginList::getIndexChosenByMenu (const Array<PluginDescription>& types
     auto i = menuResultCode - PluginTreeUtils::menuIdBase;
     return isPositiveAndBelow (i, types.size()) ? i : -1;
 }
+#endif
 
 //==============================================================================
 KnownPluginList::CustomScanner::CustomScanner() {}
@@ -623,6 +627,7 @@ bool KnownPluginList::CustomScanner::shouldExit() const noexcept
 }
 
 //==============================================================================
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
 void KnownPluginList::addToMenu (PopupMenu& menu, SortMethod sortMethod, const String& currentlyTickedPluginID) const
 {
     addToMenu (menu, getTypes(), sortMethod, currentlyTickedPluginID);
@@ -632,6 +637,7 @@ int KnownPluginList::getIndexChosenByMenu (int menuResultCode) const
 {
     return getIndexChosenByMenu (getTypes(), menuResultCode);
 }
+#endif
 
 std::unique_ptr<KnownPluginList::PluginTree> KnownPluginList::createTree (const SortMethod sortMethod) const
 {

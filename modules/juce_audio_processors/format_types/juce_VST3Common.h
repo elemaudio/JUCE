@@ -43,7 +43,7 @@ JUCE_BEGIN_NO_SANITIZE ("vptr")
         return Steinberg::kNotImplemented; \
     }
 
-static bool doUIDsMatch (const Steinberg::TUID a, const Steinberg::TUID b) noexcept
+static inline bool doUIDsMatch (const Steinberg::TUID a, const Steinberg::TUID b) noexcept
 {
     return std::memcmp (a, b, sizeof (Steinberg::TUID)) == 0;
 }
@@ -348,7 +348,7 @@ static AudioChannelSet::ChannelType getChannelType (Steinberg::Vst::SpeakerArran
     return static_cast<AudioChannelSet::ChannelType> (static_cast<int> (AudioChannelSet::discreteChannel0) + 6 + (channelType - 33));
 }
 
-static Steinberg::Vst::SpeakerArrangement getVst3SpeakerArrangement (const AudioChannelSet& channels) noexcept
+static inline Steinberg::Vst::SpeakerArrangement getVst3SpeakerArrangement (const AudioChannelSet& channels) noexcept
 {
     using namespace Steinberg::Vst::SpeakerArr;
 
@@ -392,7 +392,7 @@ static Steinberg::Vst::SpeakerArrangement getVst3SpeakerArrangement (const Audio
     return result;
 }
 
-static AudioChannelSet getChannelSetForSpeakerArrangement (Steinberg::Vst::SpeakerArrangement arr) noexcept
+static inline AudioChannelSet getChannelSetForSpeakerArrangement (Steinberg::Vst::SpeakerArrangement arr) noexcept
 {
     using namespace Steinberg::Vst::SpeakerArr;
 
@@ -452,6 +452,7 @@ public:
     VSTComSmartPtr() noexcept : source (nullptr) {}
     VSTComSmartPtr (ObjectType* object, bool autoAddRef = true) noexcept  : source (object)  { if (source != nullptr && autoAddRef) source->addRef(); }
     VSTComSmartPtr (const VSTComSmartPtr& other) noexcept : source (other.source)            { if (source != nullptr) source->addRef(); }
+    VSTComSmartPtr (VSTComSmartPtr&& other) noexcept : source (nullptr)                      { std::swap(other.source, source); }
     ~VSTComSmartPtr()                                                                        { if (source != nullptr) source->release(); }
 
     operator ObjectType*() const noexcept    { return source; }
@@ -464,6 +465,13 @@ public:
     VSTComSmartPtr& operator= (ObjectType* const newObjectToTakePossessionOf)
     {
         VSTComSmartPtr p (newObjectToTakePossessionOf);
+        std::swap (p.source, source);
+        return *this;
+    }
+
+    VSTComSmartPtr& operator= (VSTComSmartPtr&& other)
+    {
+        VSTComSmartPtr p (std::move(other));
         std::swap (p.source, source);
         return *this;
     }

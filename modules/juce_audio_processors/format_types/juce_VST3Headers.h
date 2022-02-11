@@ -173,6 +173,7 @@ namespace Steinberg
    #if JUCE_LINUX || JUCE_BSD
     DEF_CLASS_IID (Linux::IRunLoop)
     DEF_CLASS_IID (Linux::IEventHandler)
+    DEF_CLASS_IID (Linux::ITimerHandler)
    #endif
 }
 #endif // JUCE_VST3HEADERS_INCLUDE_HEADERS_ONLY

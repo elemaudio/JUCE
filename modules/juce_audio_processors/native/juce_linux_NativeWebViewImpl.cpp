@@ -36,21 +36,17 @@ class LinuxWebView : public NativeWebView::Impl
 {
 public:
     //==============================================================================
-    LinuxWebView(::Window hostWindow,
-                 Rectangle<int> const& initialBounds,
+    LinuxWebView(Rectangle<int> const& initialBounds,
                  URL const& url,
                  String const& jsBootstrap,
                  Callbacks && jsCallbacks)
-      : plug(gtk_plug_new (hostWindow), gtk_widget_destroy),
-        fixed(gtk_fixed_new(), gtk_widget_destroy),
+      : fixed(gtk_fixed_new(), gtk_widget_destroy),
         wkView(webkit_web_view_new(), gtk_widget_destroy),
         jsCancellable(g_cancellable_new(), [] (GCancellable* obj) { g_cancellable_cancel (obj); g_object_unref (obj); }),
         currentBounds(initialBounds),
         callbacks(std::move(jsCallbacks))
     {
         gtk_fixed_put(reinterpret_cast<GtkFixed*>(fixed.get()), wkView.get(), 0, 0);
-        gtk_container_add (reinterpret_cast<GtkContainer*>(plug.get()), fixed.get());
-        gtk_widget_show_all (plug.get());
         setBounds(currentBounds);
 
         MemoryOutputStream mo;
@@ -89,6 +85,29 @@ public:
     Rectangle<int> getBounds() override
     {
         return currentBounds;
+    }
+
+    void attachToParent(void* nativePtr) override {
+        if (plug != nullptr) {
+            jassertfalse;
+            return;
+        }
+
+        auto x11parent = reinterpret_cast<::Window>(nativePtr);
+
+        plug = std::unique_ptr<GtkWidget, void (*)(GtkWidget*)>(gtk_plug_new(x11parent), gtk_widget_destroy);
+        gtk_container_add (reinterpret_cast<GtkContainer*>(plug.get()), fixed.get());
+        gtk_widget_show_all (plug.get());
+    }
+
+    void detachFromParent() override {
+        if (plug == nullptr) {
+            jassertfalse;
+            return;
+        }
+
+        gtk_container_remove(reinterpret_cast<GtkContainer*>(plug.get()), fixed.get());
+        plug = nullptr;
     }
 
     void evalJS(String const& javascript) override
@@ -154,23 +173,22 @@ private:
     }
 
     //==============================================================================
-    std::unique_ptr<GtkWidget, void (*)(GtkWidget*)> plug;
     std::unique_ptr<GtkWidget, void (*)(GtkWidget*)> fixed;
     std::unique_ptr<GtkWidget, void (*)(GtkWidget*)> wkView;
     std::unique_ptr<GCancellable, void (*)(GCancellable*)> jsCancellable;
     String jsInjection;
     Rectangle<int> currentBounds;
     Callbacks callbacks;
+    std::unique_ptr<GtkWidget, void (*)(GtkWidget*)> plug = {nullptr, gtk_widget_destroy};
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LinuxWebView)
 };
 
-std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(void* parentNativeWindow,
-                                                                 Rectangle<int> const& initialBounds,
+std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(Rectangle<int> const& initialBounds,
                                                                  URL const& url,
                                                                  String const& jsBootstrap,
                                                                  NativeWebView::Impl::Callbacks && callbacks) {
-    return std::make_unique<LinuxWebView> (reinterpret_cast<::Window> (parentNativeWindow), initialBounds, url, jsBootstrap, std::move(callbacks));
+    return std::make_unique<LinuxWebView> (initialBounds, url, jsBootstrap, std::move(callbacks));
 }
 }

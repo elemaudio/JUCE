@@ -35,12 +35,16 @@ class WinWebView : public NativeWebView::Impl
 {
 public:
     //==============================================================================
-    WinWebView(::HWND hostWindow,
-                 Rectangle<int> const& initialBounds,
-                 URL const& url,
-                 String const& jsBootstrap,
-                 Callbacks && jsCallbacks)
-        : callbacks(std::move(jsCallbacks))
+    WinWebView(Rectangle<int> const& initialBounds,
+               URL const& url,
+               String const& jsBootstrap,
+               Callbacks && jsCallbacks)
+        : callbacks(std::move(jsCallbacks)),
+        windowClass(registerWindowClass()),
+        parentWhenDetached(CreateWindowEx(0, 
+                                          (LPCTSTR)(pointer_sized_uint)windowClass,
+                                          L"", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                                          nullptr, nullptr, (HMODULE)Process::getCurrentModuleInstanceHandle(), nullptr))
     {
         init_apartment(winrt::apartment_type::single_threaded);
         auto process = winrt::Windows::Web::UI::Interop::WebViewControlProcess();
@@ -51,7 +55,8 @@ public:
         rc.Y = static_cast<float>(initialBounds.getY());
         rc.Width = static_cast<float>(initialBounds.getWidth());
         rc.Height = static_cast<float>(initialBounds.getHeight());
-        auto asyncOp = process.CreateWebViewControlAsync(reinterpret_cast<int64_t>(hostWindow), rc);
+
+        auto asyncOp = process.CreateWebViewControlAsync(reinterpret_cast<int64_t>(parentWhenDetached), rc);
         if (asyncOp.Status() != winrt::Windows::Foundation::AsyncStatus::Completed) {
             ::HANDLE h(::CreateEvent(nullptr, false, false, nullptr));
             asyncOp.Completed([h](auto, auto) { ::SetEvent(h); });
@@ -107,6 +112,12 @@ public:
         }
     }
 
+    ~WinWebView()
+    {
+        ::DestroyWindow(parentWhenDetached);
+        ::UnregisterClass((LPCTSTR)(pointer_sized_uint)windowClass, nullptr);
+    }
+
     void setBounds(Rectangle<int> const& newBounds) override {
         winrt::Windows::Foundation::Rect rc;
 
@@ -123,6 +134,38 @@ public:
                               static_cast<int>(bounds.Width), static_cast<int>(bounds.Height));
     }
 
+    void attachToParent(void* nativeWindowPtr) override
+    {
+        if (currentParent != nullptr)
+        {
+            jassertfalse;
+            return;
+        }
+
+        auto nativeWindow = reinterpret_cast<::HWND>(nativeWindowPtr);
+
+        if (auto webKitNativeWindow = ::FindWindowEx(parentWhenDetached, nullptr, nullptr, nullptr))
+        {
+            ::SetParent(webKitNativeWindow, nativeWindow);
+            currentParent = nativeWindow;
+        }
+    }
+
+    void detachFromParent() override
+    {
+        if (currentParent == nullptr)
+        {
+            jassertfalse;
+            return;
+        }
+
+        if (auto webKitNativeWindow = ::FindWindowEx(currentParent, nullptr, nullptr, nullptr))
+        {
+            ::SetParent(webKitNativeWindow, parentWhenDetached);
+            currentParent = nullptr;
+        }
+    }
+
     void executeJS(String const& functionName, String const& param) override
     {
         mWebView.InvokeScriptAsync(winrt::to_hstring(functionName.toRawUTF8()),
@@ -134,8 +177,32 @@ public:
         executeJS("eval", javascript);
     }
 private:
+    ::ATOM registerWindowClass()
+    {
+        String className;
+
+        {
+            MemoryOutputStream mo;
+
+            mo << "webKitWndHolder_" << reinterpret_cast<std::int64_t>(this);
+            className = mo.toString();
+        }
+
+        WNDCLASSEX wc = {};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = ::DefWindowProc;
+        wc.cbWndExtra = 4;
+        wc.hInstance = (HMODULE)Process::getCurrentModuleInstanceHandle();
+        wc.lpszClassName = className.toWideCharPointer();
+
+        return ::RegisterClassEx(&wc);
+    }
+
     //==============================================================================
     Callbacks callbacks;
+    ::ATOM windowClass;
+    ::HWND parentWhenDetached;
+    ::HWND currentParent = nullptr;
     winrt::Windows::Web::UI::Interop::WebViewControl mWebView = {nullptr};
 
     //==============================================================================
@@ -143,11 +210,10 @@ private:
 };
 
 //==============================================================================
-std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(void* parentNativeWindow,
-                                                                 Rectangle<int> const& initialBounds,
+std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(Rectangle<int> const& initialBounds,
                                                                  URL const& url,
                                                                  String const& jsBootstrap,
                                                                  NativeWebView::Impl::Callbacks && callbacks) {
-    return std::make_unique<WinWebView> (reinterpret_cast<::HWND> (parentNativeWindow), initialBounds, url, jsBootstrap, std::move(callbacks));
+    return std::make_unique<WinWebView> (initialBounds, url, jsBootstrap, std::move(callbacks));
 }
 }

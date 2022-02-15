@@ -92,13 +92,14 @@ namespace juce
 {
 
 //==============================================================================
-NativeWebView::NativeWebView(void* parentNativeWindow,
-                             WebViewConfiguration const& webViewConfig,
-                             std::function<void (NativeWebView&, int, int)> && resizeCallback)
-    : config (webViewConfig),
-      resize (std::move (resizeCallback)),
-      nativeImpl(Impl::create(parentNativeWindow,
-                              webViewConfig.size,
+NativeWebView::NativeWebView(WebViewConfiguration const& webViewConfig,
+                             std::function<void ()> && loadFinished,
+                             std::function<void (String const&)> && receivedCb)
+    : defaultSizeRequestHandler(std::make_shared<std::function<void (NativeWebView&, int, int)>>([this] (NativeWebView& nv, int w, int h) { defaultSizeHandler(nv, w, h); })),
+      config (webViewConfig),
+      finished (std::move (loadFinished)),
+      msgReceived (std::move (receivedCb)),
+      nativeImpl(Impl::create(webViewConfig.size,
                               webViewConfig.url,
                               javascriptInjection,
                               {
@@ -107,10 +108,7 @@ NativeWebView::NativeWebView(void* parentNativeWindow,
                               }))
 {}
 
-NativeWebView::~NativeWebView() {
-    if (config.onDestroy)
-        config.onDestroy();
-}
+NativeWebView::~NativeWebView() = default;
 
 void NativeWebView::setBounds(Rectangle<int> const& rc)
 {
@@ -122,15 +120,28 @@ Rectangle<int> NativeWebView::getBounds()
     return nativeImpl->getBounds();
 }
 
+void NativeWebView::setResizeRequestCallback(std::weak_ptr<std::function<void (NativeWebView&, int, int)>> && cb)
+{
+    resize = std::move(cb);
+}
+
+void NativeWebView::sendMessage(String const& msg)
+{
+    nativeImpl->executeJS("juceBridgeOnMessage", msg);
+}
+
 void NativeWebView::finishLoading()
 {
-    if (config.onLoad)
+    if (finished)
     {
-      config.onLoad([this] (String const& msg)
-      {
-         nativeImpl->executeJS("juceBridgeOnMessage", msg);
-      });
+        finished();
     }
+}
+
+void NativeWebView::defaultSizeHandler(NativeWebView&, int w, int h)
+{
+    Rectangle<int> rc (0, 0, w, h);
+    setBounds(rc);
 }
 
 void NativeWebView::messageReceived(String const& msg)
@@ -144,8 +155,8 @@ void NativeWebView::messageReceived(String const& msg)
     auto arg = msg.substring(deliminator + 1);
 
     if (cmd == "message") {
-        if (config.onMessageReceived)
-            config.onMessageReceived(arg);
+        if (msgReceived)
+            msgReceived(arg);
     } else if (cmd == "resize") {
         auto size = ::juce::StringArray::fromTokens(arg, ",", {});
 
@@ -155,20 +166,41 @@ void NativeWebView::messageReceived(String const& msg)
         auto width  = size[0].getIntValue();
         auto height = size[1].getIntValue();
 
-        if (resize)
-            resize (*this, width, height);
+        if (auto cb = resize.lock()) {
+            if (*cb)
+                (*cb) (*this, width, height);
+        }
     }
 }
 
-#if JUCE_MAC || JUCE_IOS
-void* NativeWebView::transferOwnershipToNativeView(std::unique_ptr<NativeWebView> && nativeWebView)
+void NativeWebView::attachToParent(void* nativeParent)
 {
-    return [Impl::transferOwnershipToNativeView(std::move(nativeWebView)).release() autorelease];
+    if (std::exchange(attached, true))
+    {
+        // multiple editors for a single plug-in instance
+        // not supported
+        jassertfalse;
+        return;
+    }
+    
+    nativeImpl->attachToParent(nativeParent);
 }
 
-NativeWebView* NativeWebView::getWebViewObjFromNSView(void* nativeView)
+void NativeWebView::detachFromParent()
 {
-    return Impl::getWebViewObjFromNSView(static_cast<NSObject*>(nativeView));
+    if (std::exchange(attached, false))
+        nativeImpl->detachFromParent();
+}
+
+bool NativeWebView::isAttached() const noexcept
+{
+    return attached;
+}
+
+#if JUCE_MAC || JUCE_IOS
+void* NativeWebView::getNativeView()
+{
+    return nativeImpl->getNativeView();
 }
 #endif
 
@@ -179,10 +211,5 @@ void NativeWebView::Impl::executeJS(String const& functionName, String const& pa
 
     mo << functionName << "(" << "\"" << toEscapedJsLiteral(param) << "\");";
     evalJS(mo.toString());
-}
-
-NativeWebView::Impl* NativeWebView::Impl::getImpl(NativeWebView* _this)
-{
-    return _this->nativeImpl.get();
 }
 }

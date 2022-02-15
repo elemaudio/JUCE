@@ -628,18 +628,20 @@ static void setValueAndNotifyIfChanged (AudioProcessorParameter& param, float ne
 class WebViewEditor  : public Vst::EditorView
 {
 public:
-    WebViewEditor (WebViewConfiguration && webConfig, Vst::EditController* ec, ViewRect& webViewBounds)
+    WebViewEditor (NativeWebView& nativeWebView, Vst::EditController* ec, ViewRect& webViewBounds)
         : Vst::EditorView (ec, &webViewBounds),
-          webViewConfig (std::move(webConfig)),
-          currentBounds(webViewBounds)
-    {}
+          webView(nativeWebView),
+          resizeCb(std::make_shared<std::function<void (NativeWebView&, int w, int h)>>([this] (NativeWebView& n, int w, int h) { webViewResizeCallback (n, w, h); }))
+    {
+        webView.setResizeRequestCallback(resizeCb);
+    }
 
     REFCOUNT_METHODS (Vst::EditorView)
 
     //==============================================================================
     tresult PLUGIN_API isPlatformTypeSupported (FIDString type) override
     {
-        if (type != nullptr && (! webViewConfig.url.isEmpty()))
+        if (type != nullptr)
         {
 #if JUCE_LINUX
             if (strcmp (type, kPlatformTypeX11EmbedWindowID) == 0)
@@ -659,40 +661,29 @@ public:
         if (parent == nullptr || isPlatformTypeSupported (type) == kResultFalse)
             return kResultFalse;
 
-        if (webView != nullptr)
+        if (webView.isAttached())
             removed();
-
-         webView = std::make_unique<NativeWebView>(parent, webViewConfig,
-                                                   [this] (NativeWebView&, int w, int h)
-                                                   {
-                                                       if (plugFrame != nullptr) {
-                                                           ViewRect rc (0, 0, w, h);
-                                                           plugFrame->resizeView(this, &rc);
-                                                       }
-                                                   });
-
-
+        
+        webView.attachToParent(parent);
+        
         return kResultTrue;
     }
 
     tresult PLUGIN_API removed() override
     {
-        if (webView != nullptr) {
-            webView = nullptr;
+        if (webView.isAttached()) {
+            webView.detachFromParent();
         }
-
+        
         return CPluginView::removed();
     }
 
     tresult PLUGIN_API onSize (ViewRect* rc) override
     {
         if (rc != nullptr) {
-            if (webView != nullptr) {
-                Rectangle<int> bounds(0, 0, rc->getWidth(), rc->getHeight());
-                webView->setBounds(bounds);
-            }
+            Rectangle<int> bounds(0, 0, rc->getWidth(), rc->getHeight());
+            webView.setBounds(bounds);
 
-            currentBounds = *rc;
             return kResultTrue;
         }
         return kResultFalse;
@@ -702,13 +693,8 @@ public:
     {
         if (size != nullptr)
         {
-            if (webView != nullptr) {
-                auto rc = webView->getBounds();
-                *size = currentBounds = ViewRect(rc.getX(), rc.getY(), rc.getRight(), rc.getBottom());
-            } else {
-                *size = currentBounds;
-            }
-
+            auto rc = webView.getBounds();
+            *size = ViewRect(rc.getX(), rc.getY(), rc.getRight(), rc.getBottom());
             return kResultTrue;
         }
 
@@ -727,11 +713,20 @@ public:
     }
 
 private:
+    void webViewResizeCallback (NativeWebView&, int w, int h)
+    {
+        if (! webView.isAttached())
+            return;
+        
+        if (plugFrame != nullptr) {
+            ViewRect rc (0, 0, w, h);
+            plugFrame->resizeView(this, &rc);
+        }
+    }
 
     //==============================================================================
-    WebViewConfiguration webViewConfig;
-    std::unique_ptr<NativeWebView> webView;
-    ViewRect currentBounds;
+    NativeWebView& webView;
+    std::shared_ptr<std::function<void (NativeWebView&, int w, int h)>> resizeCb;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebViewEditor)
@@ -1261,15 +1256,16 @@ public:
     {
         if (auto* pluginInstance = getPluginInstance())
         {
-            auto webConfig = pluginInstance->getEditorWebViewConfiguration();
-            const auto mayCreateEditor = (! webConfig.url.isEmpty())
+            auto* webView = pluginInstance->getNativeWebView();
+            const auto mayCreateEditor = webView != nullptr
                                       && name != nullptr
                                       && std::strcmp (name, Vst::ViewType::kEditor) == 0;
 
             if (mayCreateEditor) {
-                ViewRect rc (0, 0, webConfig.size.getWidth(), webConfig.size.getHeight());
+                auto jBounds = webView->getBounds();
+                ViewRect rc (0, 0, jBounds.getWidth(), jBounds.getHeight());
 
-                return new WebViewEditor (std::move(webConfig), this, rc);
+                return new WebViewEditor (*webView, this, rc);
             }
         }
 

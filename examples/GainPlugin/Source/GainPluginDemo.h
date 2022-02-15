@@ -57,7 +57,8 @@ public:
     //==============================================================================
     GainProcessor()
         : AudioProcessor (BusesProperties().withInput  ("Input",  AudioChannelSet::stereo())
-                                           .withOutput ("Output", AudioChannelSet::stereo()))
+                                           .withOutput ("Output", AudioChannelSet::stereo()),
+                          getEditorWebViewConfiguration())
     {
         addParameter (bypass = new AudioParameterBool ("bypass", "Bypass", false));
         addParameter (gain = new AudioParameterFloat ("gain", "Gain", 0.0f, 1.0f, 0.5f));
@@ -83,75 +84,6 @@ public:
     }
     
     AudioProcessorParameter* getBypassParameter() const override { return bypass; }
-
-    //==============================================================================
-    WebViewConfiguration getEditorWebViewConfiguration() override
-    {
-        WebViewConfiguration config;
-
-        static constexpr char htmlPage[] = R"END(
-            <html style="background-color:#33475b">
-                <body>
-                    <center>
-            <script>
-                function juceBridgeOnMessage(message) {
-                    var args = message.split("@");
-                    var paramId = args[0];
-                    var value = Number(args[1]);
-                    
-                    if (paramId == "gain")        { document.getElementById("gain").value = value * 100.; }
-                    else if (paramId == "bypass") { document.getElementById("bypass").checked = value; }
-                }
-                
-                window.onload = function () {
-                    juceBridge.postMessage("update");
-                }
-            </script>
-            <input type="checkbox" id="bypass" name="bypass" onchange="juceBridge.postMessage('param@bypass@' + (this.checked ? '1' : '0'))"/>
-            <label for="bypass">Bypass</label><br/>
-            <input type="range" id="gain" value = "0" name="gain" min="0" max="100" oninput="juceBridge.postMessage('param@gain@' + (this.value / 100.))"/>
-            <label for="range">Gain</label><br/>
-            <button name = "button" value = "Resize" type = "button" onclick="juceBridge.resizeTo(800, 400)">Resize!</button>
-            </center>
-            </body>
-            </html>
-            )END";
-
-        MemoryBlock htmlPageData(htmlPage, sizeof(htmlPage));
-    
-        config.url = URL(htmlPageData, "text/html");
-        config.size = Rectangle<int>(0, 0, 200, 100);
-        config.onMessageReceived
-            = [this] (String const& v)
-            {
-                auto args = StringArray::fromTokens(v, "@", {});
-                auto msg = args[0];
-                
-                if (msg == "param") {
-                    auto param = args[1];
-                    auto value = args[2].getFloatValue();
-                    
-                    if      (param == "gain")   gain->setValueNotifyingHost(value);
-                    else if (param == "bypass") bypass->setValueNotifyingHost(value);
-                } else if (msg == "update") {
-                    triggerAsyncUpdate();
-                }
-            };
-        
-        config.onLoad
-            = [this] (WebViewConfiguration::JSMessagePoster && messagePoster)
-            {
-                sendMessageToJavascript = std::move(messagePoster);
-            };
-        
-        config.onDestroy
-            = [this] ()
-            {
-                sendMessageToJavascript = {};
-            };
-        
-        return config;
-    }
 
     //==============================================================================
     const String getName() const override                  { return "Gain PlugIn"; }
@@ -185,22 +117,37 @@ public:
 
         return (mainInLayout == mainOutLayout && (! mainInLayout.isDisabled()));
     }
+    
+    //==============================================================================
+    void webViewReceivedMessage(String const& message) override
+    {
+        auto args = StringArray::fromTokens(message, "@", {});
+        auto msg = args[0];
+        
+        if (msg == "param") {
+            auto param = args[1];
+            auto value = args[2].getFloatValue();
+            
+            if      (param == "gain")   gain->setValueNotifyingHost(value);
+            else if (param == "bypass") bypass->setValueNotifyingHost(value);
+        } else if (msg == "update") {
+            triggerAsyncUpdate();
+        }
+    }
 
 private:
     //==============================================================================
     void handleAsyncUpdate () override {
-        if (sendMessageToJavascript) {
-            {
-                MemoryOutputStream mo;
-                mo << "bypass@" << (static_cast<bool>(*bypass) ? 1 : 0);
-                sendMessageToJavascript(mo.toString());
-            }
-            
-            {
-                MemoryOutputStream mo;
-                mo << "gain@"   << static_cast<float>(*gain) << "\n";
-                sendMessageToJavascript(mo.toString());
-            }
+        {
+            MemoryOutputStream mo;
+            mo << "bypass@" << (static_cast<bool>(*bypass) ? 1 : 0);
+            sendMessageToWebView(mo.toString());
+        }
+        
+        {
+            MemoryOutputStream mo;
+            mo << "gain@"   << static_cast<float>(*gain) << "\n";
+            sendMessageToWebView(mo.toString());
         }
     }
     
@@ -211,10 +158,54 @@ private:
     void parameterGestureChanged (int, bool) override {}
     
     //==============================================================================
+    static WebViewConfiguration getEditorWebViewConfiguration()
+    {
+        static WebViewConfiguration config = [] ()
+        {
+            static constexpr char htmlPage[] = R"END(
+                <html style="background-color:#33475b">
+                    <body>
+                        <center>
+                <script>
+                    function juceBridgeOnMessage(message) {
+                        var args = message.split("@");
+                        var paramId = args[0];
+                        var value = Number(args[1]);
+                        
+                        if (paramId == "gain")        { document.getElementById("gain").value = value * 100.; }
+                        else if (paramId == "bypass") { document.getElementById("bypass").checked = value; }
+                    }
+                    
+                    window.onload = function () {
+                        juceBridge.postMessage("update");
+                    }
+                </script>
+                <input type="checkbox" id="bypass" name="bypass" onchange="juceBridge.postMessage('param@bypass@' + (this.checked ? '1' : '0'))"/>
+                <label for="bypass">Bypass</label><br/>
+                <input type="range" id="gain" value = "0" name="gain" min="0" max="100" oninput="juceBridge.postMessage('param@gain@' + (this.value / 100.))"/>
+                <label for="range">Gain</label><br/>
+                <button name = "button" value = "Resize" type = "button" onclick="juceBridge.resizeTo(800, 400)">Resize!</button>
+                </center>
+                </body>
+                </html>
+                )END";
+            MemoryBlock htmlPageData(htmlPage, sizeof(htmlPage));
+            
+            WebViewConfiguration result;
+            
+            result.url = URL(htmlPageData, "text/html");
+            result.size = Rectangle<int>(0, 0, 200, 100);
+            
+            return result;
+        } ();
+        
+        return config;
+    }
+    
+    //==============================================================================
     AudioParameterBool* bypass;
     AudioParameterFloat* gain;
     
-    WebViewConfiguration::JSMessagePoster sendMessageToJavascript;
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GainProcessor)
 };

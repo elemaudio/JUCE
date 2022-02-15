@@ -44,17 +44,11 @@ public:
     StandalonePlugInApp(ObjCClassType* _self)
        : objCInstance(_self), app([NSApplication sharedApplication]),
          audioProcessor(::createPluginFilter()),
-         webConfig(audioProcessor->getEditorWebViewConfiguration())
+         resizeCallback(std::make_shared<std::function<void (NativeWebView&, int, int)>>([this] (NativeWebView& nv, int w, int h) { webViewResizeCallback(nv, w, h); }))
     {
         [app setDelegate:objCInstance];
         setupMenuBar();
-
-        if (! webConfig.url.isEmpty()) {
-            setupWindow();
-        } else {
-            // no UI?
-            jassertfalse;
-        }
+        setupWindow();
     }
 
     void quit() {
@@ -69,26 +63,28 @@ public:
 private:
     void setupWindow()
     {
-        auto contentRect = NSMakeRect(0, 0, webConfig.size.getWidth(), webConfig.size.getHeight());
-        mainWindow.reset([[NSWindow alloc] initWithContentRect:contentRect
-                                                     styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable)
-                                                       backing:NSBackingStoreBuffered
-                                                         defer:YES]);
-
-        nativeWebView.reset(new NativeWebView([mainWindow.get() contentView], webConfig,
-                                              [this] (NativeWebView& nv, int w, int h)
-                                              {
-                                                  auto oldFrame = [mainWindow.get() frame];
-                                                  auto deltaX = w - oldFrame.size.width;
-                                                  auto deltaY = w - oldFrame.size.width;
-                                                  [mainWindow.get() setFrame:NSMakeRect(oldFrame.origin.x - (deltaX / 2),
-                                                                                        oldFrame.origin.y - (deltaY / 2),
-                                                                                        w, h)
-                                                                     display:YES];
-                                              }));
-        [[[[mainWindow.get() contentView] subviews] objectAtIndex:0] setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
-        [mainWindow.get() center];
-        [mainWindow.get() makeKeyAndOrderFront:objCInstance];
+        if (auto* webView = audioProcessor->getNativeWebView())
+        {
+            auto jbounds = webView->getBounds();
+            auto contentRect = NSMakeRect(0, 0, jbounds.getWidth(), jbounds.getHeight());
+            mainWindow.reset([[NSWindow alloc] initWithContentRect:contentRect
+                                                         styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable)
+                                                           backing:NSBackingStoreBuffered
+                                                             defer:YES]);
+            
+            auto* parentView = [mainWindow.get() contentView];
+            webView->setResizeRequestCallback (resizeCallback);
+            webView->attachToParent(parentView);
+            
+            [[[parentView subviews] objectAtIndex:0] setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
+            [mainWindow.get() center];
+            [mainWindow.get() makeKeyAndOrderFront:objCInstance];
+        }
+        else
+        {
+            // huh... no UI?
+            jassertfalse;
+        }
     }
 
     void setupMenuBar()
@@ -108,15 +104,27 @@ private:
         [appMenu.get() addItem:quitItem.get()];
         [appMenuItem.get() setSubmenu:appMenu.get()];
     }
+    
+    //==============================================================================
+    void webViewResizeCallback(NativeWebView&, int w, int h)
+    {
+        auto oldFrame = [mainWindow.get() frame];
+        auto deltaX = w - oldFrame.size.width;
+        auto deltaY = w - oldFrame.size.width;
+        [mainWindow.get() setFrame:NSMakeRect(oldFrame.origin.x - (deltaX / 2),
+                                              oldFrame.origin.y - (deltaY / 2),
+                                              w, h)
+                           display:YES];
+    }
 
     //==============================================================================
     ObjCClassType* objCInstance;
     NSApplication* app;
     ScopedJuceInitialiser_GUI libraryInitialiser;
     std::unique_ptr<AudioProcessor> audioProcessor;
-    WebViewConfiguration webConfig;
     std::unique_ptr<NativeWebView> nativeWebView;
     std::unique_ptr<NSWindow, NSObjectDeleter> mainWindow;
+    std::shared_ptr<std::function<void (NativeWebView&, int, int)>> resizeCallback;
 
     //==============================================================================
     struct Class  : public ObjCClass<ObjCClassType>

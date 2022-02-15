@@ -33,19 +33,26 @@ void JUCE_CALLTYPE AudioProcessor::setTypeOfNextNewPlugin (AudioProcessor::Wrapp
     wrapperTypeBeingCreated = type;
 }
 
-AudioProcessor::AudioProcessor()
+AudioProcessor::AudioProcessor(WebViewConfiguration const& wv)
     : AudioProcessor (BusesProperties().withInput  ("Input",  AudioChannelSet::stereo(), false)
-                                       .withOutput ("Output", AudioChannelSet::stereo(), false))
+                                       .withOutput ("Output", AudioChannelSet::stereo(), false), wv)
 {
 }
 
-AudioProcessor::AudioProcessor (const BusesProperties& ioConfig)
+AudioProcessor::AudioProcessor (const BusesProperties& ioConfig, WebViewConfiguration const& wv)
     : wrapperType (wrapperTypeBeingCreated.get())
 {
     for (auto& layout : ioConfig.inputLayouts)   createBus (true,  layout);
     for (auto& layout : ioConfig.outputLayouts)  createBus (false, layout);
 
     updateSpeakerFormatStrings();
+    
+    if (! wv.url.isEmpty())
+    {
+        nativeWebView = std::make_unique<NativeWebView>(wv,
+                                                        [this] () { webViewLoaded(); },
+                                                        [this] (String const& m) { webViewReceivedMessage(m); });
+    }
 }
 
 AudioProcessor::~AudioProcessor()
@@ -906,9 +913,14 @@ AudioProcessorEditor* AudioProcessor::createEditorIfNeeded()
 }
 #endif
 
-WebViewConfiguration AudioProcessor::getEditorWebViewConfiguration()
+void AudioProcessor::webViewLoaded() {}
+
+void AudioProcessor::webViewReceivedMessage(String const&) {}
+
+void AudioProcessor::sendMessageToWebView(String const& msg)
 {
-    return {};
+    if (nativeWebView)
+        nativeWebView->sendMessage(msg);
 }
 
 //==============================================================================
@@ -1292,6 +1304,11 @@ void AudioProcessor::sendParamChangeMessageToListeners (int parameterIndex, floa
             jassertfalse; // called with an out-of-range parameter index!
         }
     }
+}
+
+NativeWebView* AudioProcessor::getNativeWebView()
+{
+    return nativeWebView.get();
 }
 
 void AudioProcessor::beginParameterChangeGesture (int parameterIndex)

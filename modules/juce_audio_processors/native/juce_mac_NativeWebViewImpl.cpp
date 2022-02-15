@@ -181,30 +181,6 @@ public:
         return Class::_this(obj);
     }
 
-    //==============================================================================
-    void acquireOwnership(std::unique_ptr<NativeWebView> && webViewCppObj)
-    {
-        nativeWebView = std::move(webViewCppObj);
-    }
-
-    NativeWebView* getWebViewObjFromNSView()
-    {
-        jassert (nativeWebView != nullptr);
-        return nativeWebView.get();
-    }
-
-    static NativeWebView* getWebViewObjFromNSViewStatic(NSObject* nsView)
-    {
-        if (! [nsView isKindOfClass:Class::get().cls]) {
-            jassertfalse;
-            return nullptr;
-        }
-
-        // it's ok to upcast now
-        auto* _this = (WKWebView*)nsView;
-        return cppObject(_this)->getWebViewObjFromNSView();
-    }
-
 private:
     //==============================================================================
     void didReceiveScriptMessage(WKScriptMessage* msg)
@@ -226,10 +202,6 @@ private:
     WKWebView* objcInstance;
     std::unique_ptr<NSObject<WKScriptMessageHandler>, NSObjectDeleter> messageHandler;
     NativeWebView::Impl::Callbacks callbacks;
-
-    // used to hold ownership of the NativeWebView object when transferOwnershipToNativeView
-    // is called
-    std::unique_ptr<NativeWebView> nativeWebView;
 
     //==============================================================================
     struct InitializationParams {
@@ -328,69 +300,44 @@ private:
 class MacWebView  : public NativeWebView::Impl
 {
 public:
-    MacWebView(NSView* parentView,
-               Rectangle<int> const& initialBounds,
+    MacWebView(Rectangle<int> const& initialBounds,
                URL const& url,
                String const& jsBootstrap,
                NativeWebView::Impl::Callbacks && callbacks)
-        : webViewStorage(WebkitView::createInstance(initialBounds, url, jsBootstrap, std::move(callbacks))),
-          webView(webViewStorage.get())
-    {
-        if (parentView != nullptr)
-            [parentView addSubview:webView];
-    }
+        : webView(WebkitView::createInstance(initialBounds, url, jsBootstrap, std::move(callbacks)))
+    {}
 
     void setBounds(Rectangle<int> const& newBounds) override {
-        WebkitView::cppObject(webView)->setBounds(newBounds);
+        WebkitView::cppObject(webView.get())->setBounds(newBounds);
     }
 
     Rectangle<int> getBounds() override {
-        return WebkitView::cppObject(webView)->getBounds();
+        return WebkitView::cppObject(webView.get())->getBounds();
     }
 
     void evalJS(String const& javascript) override {
-        WebkitView::cppObject(webView)->evalJS(javascript);
+        WebkitView::cppObject(webView.get())->evalJS(javascript);
     }
-
-    std::unique_ptr<NSView, NSObjectDeleter> transferOwnershipToNative(std::unique_ptr<NativeWebView> && webViewCppObj)
-    {
-        WebkitView::cppObject(webView)->acquireOwnership(std::move(webViewCppObj));
-
-        // transfer ownership from our storage to the return value
-        std::unique_ptr<WKWebView, NSObjectDeleter> returnValue;
-        std::swap(returnValue, webViewStorage);
-
-        return returnValue;
+    
+    void attachToParent(void* nativeView) override {
+        [static_cast<NSView*>(nativeView) addSubview:webView.get()];
     }
-
-    static std::unique_ptr<NSView, NSObjectDeleter> transferOwnershipToNativeViewStatic(std::unique_ptr<NativeWebView> && webViewCppObj)
-    {
-        if (auto* _this = dynamic_cast<MacWebView*>(getImpl(webViewCppObj.get())))
-            return _this->transferOwnershipToNative (std::move(webViewCppObj));
-
-        jassertfalse;
-        return {};
+    
+    void detachFromParent() override {
+        [webView.get() removeFromSuperview];
+    }
+    
+    void* getNativeView() override {
+        return webView.get();
     }
 private:
-    std::unique_ptr<WKWebView, NSObjectDeleter> webViewStorage;
-    WKWebView* webView;
+    std::unique_ptr<WKWebView, NSObjectDeleter> webView;
 };
 } // anonymous namespace
 
-std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(void* parentNativeWindow,
-                                                                 Rectangle<int> const& initialBounds,
+std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(Rectangle<int> const& initialBounds,
                                                                  URL const& url,
                                                                  String const& jsBootstrap,
                                                                  NativeWebView::Impl::Callbacks && callbacks) {
-    return std::make_unique<MacWebView>(static_cast<NSView*>(parentNativeWindow), initialBounds, url, jsBootstrap, std::move(callbacks));
-}
-
-std::unique_ptr<NSView, NSObjectDeleter> NativeWebView::Impl::transferOwnershipToNativeView(std::unique_ptr<NativeWebView> && webView)
-{
-    return MacWebView::transferOwnershipToNativeViewStatic(std::move(webView));
-}
-
-NativeWebView* NativeWebView::Impl::getWebViewObjFromNSView(NSObject* nsView)
-{
-    return WebkitView::getWebViewObjFromNSViewStatic(nsView);
+    return std::make_unique<MacWebView>(initialBounds, url, jsBootstrap, std::move(callbacks));
 }

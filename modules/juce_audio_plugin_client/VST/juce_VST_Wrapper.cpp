@@ -798,7 +798,6 @@ public:
         if (shouldDeleteEditor)
         {
             shouldDeleteEditor = false;
-            webView = nullptr;
         }
 
         {
@@ -1080,8 +1079,7 @@ private:
     pointer_sized_int handleOpen (VstOpCodeArguments)
     {
         // Note: most hosts call this on the UI thread, but wavelab doesn't, so be careful in here.
-        auto webConfig = processor->getEditorWebViewConfiguration();
-        setHasEditorFlag (! webConfig.url.isEmpty());
+        setHasEditorFlag (processor->getNativeWebView() != nullptr);
 
         return 0;
     }
@@ -1092,7 +1090,16 @@ private:
         stopTimer();
 
         if (MessageManager::getInstance()->isThisTheMessageThread())
-            webView = nullptr;
+        {
+            if (processor != nullptr)
+            {
+                if (auto* webView = processor->getNativeWebView())
+                {
+                    if (webView->isAttached())
+                        webView->detachFromParent();
+                }
+            }
+        }
 
         return 0;
     }
@@ -1188,23 +1195,12 @@ private:
 
         if (processor != nullptr)
         {
-            if (webView != nullptr) {
+            if (auto* webView = processor->getNativeWebView()) {
                 auto rc = webView->getBounds();
                 editorRect = Vst2::ERect { 0, 0, static_cast<short>(rc.getHeight()), static_cast<short>(rc.getWidth()) };
                 *((Vst2::ERect**) args.ptr) = &editorRect;
 
                 return (pointer_sized_int) &editorRect;
-            } else {
-                auto webConfig = processor->getEditorWebViewConfiguration();
-
-                if (! webConfig.url.isEmpty())
-                {
-                    auto const& rc = webConfig.size;
-                    editorRect = Vst2::ERect { 0, 0, static_cast<short>(rc.getHeight()), static_cast<short>(rc.getWidth()) };
-                    *((Vst2::ERect**) args.ptr) = &editorRect;
-
-                    return (pointer_sized_int) &editorRect;
-                }
             }
         }
 
@@ -1217,19 +1213,16 @@ private:
         const MessageManagerLock mmLock;
         jassert (! recursionCheck);
 
-        webView = nullptr;
         if (processor != nullptr)
         {
-            auto webConfig = processor->getEditorWebViewConfiguration();
-
-            if (! webConfig.url.isEmpty())
+            if (auto* webView = processor->getNativeWebView())
             {
-                webView = std::make_unique<NativeWebView>(args.ptr, webConfig,
-                                                          [this] (NativeWebView& view, int w, int h)
-                                                          {
-                                                                ::juce::Rectangle<int> rc (0, 0, w, h);
-                                                                view.setBounds(rc);
-                                                          });
+                if (webView->isAttached())
+                    webView->detachFromParent();
+                
+                webView->setResizeRequestCallback(webView->defaultSizeRequestHandler);
+                webView->attachToParent(args.ptr);
+                
                 return 1;
             }
         }
@@ -1241,7 +1234,13 @@ private:
     {
         checkWhetherMessageThreadIsCorrect();
         const MessageManagerLock mmLock;
-        webView = nullptr;
+        
+        if (auto* webView = processor->getNativeWebView())
+        {
+            if (webView->isAttached())
+                webView->detachFromParent();
+        }
+        
         return 0;
     }
 
@@ -1657,7 +1656,6 @@ private:
     Vst2::ERect editorRect;
     MidiBuffer midiEvents;
     VSTMidiEventList outgoingEvents;
-    std::unique_ptr<NativeWebView> webView;
 
     LegacyAudioParametersWrapper juceParameters;
 

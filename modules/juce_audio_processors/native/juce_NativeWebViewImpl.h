@@ -34,8 +34,7 @@ public:
     };
 
     //==============================================================================
-    static std::unique_ptr<Impl> create(void* parentNativeWindow,
-                                        Rectangle<int> const& initialBounds,
+    static std::unique_ptr<Impl> create(Rectangle<int> const& initialBounds,
                                         URL const& url,
                                         String const& jsBootstrap,
                                         Callbacks && callbacks);
@@ -46,18 +45,17 @@ public:
     virtual Rectangle<int> getBounds() = 0;
     virtual void executeJS(String const& functionName, String const& param);
     virtual void evalJS(String const& javascript) = 0;
+    virtual void attachToParent(void*) = 0;
+    virtual void detachFromParent() = 0;
+    
+   #if JUCE_MAC || JUCE_IOS
+    virtual void* getNativeView() = 0;
+   #endif
 
 protected:
     Impl() = default;
-    static Impl* getImpl(NativeWebView*);
 
 private:
-    friend class NativeWebView;
-
-    #if JUCE_MAC || JUCE_IOS
-     static std::unique_ptr<NSView, NSObjectDeleter> transferOwnershipToNativeView(std::unique_ptr<NativeWebView>&&);
-     static NativeWebView* getWebViewObjFromNSView(NSObject*);
-    #endif
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Impl)
 };

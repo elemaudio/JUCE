@@ -26,6 +26,10 @@
 namespace juce
 {
 
+#ifndef DOXYGEN
+class NativeWebView;
+#endif
+
 //==============================================================================
 /**
     Base class for audio processing classes or plugins.
@@ -53,20 +57,20 @@ protected:
         This constructor will create a main input and output bus which are disabled
         by default. If you need more fine-grained control then use the other constructors.
     */
-    AudioProcessor();
+    AudioProcessor(WebViewConfiguration const& = {});
 
     /** Constructor for multi-bus AudioProcessors
 
         If your AudioProcessor supports multiple buses than use this constructor
         to initialise the bus layouts and bus names of your plug-in.
     */
-    AudioProcessor (const BusesProperties& ioLayouts);
+    AudioProcessor (const BusesProperties& ioLayouts, WebViewConfiguration const& = {});
 
     /** Constructor for AudioProcessors which use layout maps
         If your AudioProcessor uses layout maps then use this constructor.
     */
-    AudioProcessor (const std::initializer_list<const short[2]>& channelLayoutList)
-        : AudioProcessor (busesPropertiesFromLayoutArray (layoutListToArray (channelLayoutList)))
+    AudioProcessor (const std::initializer_list<const short[2]>& channelLayoutList, WebViewConfiguration const& wv = {})
+        : AudioProcessor (busesPropertiesFromLayoutArray (layoutListToArray (channelLayoutList)), wv)
     {
     }
 
@@ -981,7 +985,16 @@ public:
    #endif
 
     //==============================================================================
-    virtual WebViewConfiguration getEditorWebViewConfiguration();
+    /** This method is called after the webview has fully loaded the page given by the URL in the constructor.
+        After receiving this callback you can now use sendMessageToWebView to send messages to your page.
+    */
+    virtual void webViewLoaded();
+    
+    /** Invoked when javascript code on your page sent you a message. */
+    virtual void webViewReceivedMessage(String const& message);
+    
+    /** Use this method to send a message to your page. */
+    void sendMessageToWebView(String const& message);
 
     //==============================================================================
     /** Returns the default number of steps for a parameter.
@@ -1265,8 +1278,13 @@ public:
     */
     static std::unique_ptr<XmlElement> getXmlFromBinary (const void* data, int sizeInBytes);
 
+   #ifndef DOXYGEN
     /** @internal */
     static void JUCE_CALLTYPE setTypeOfNextNewPlugin (WrapperType);
+    
+    /** @internal */
+    NativeWebView* getNativeWebView();
+   #endif
 
 protected:
     /** Callback to query if the AudioProcessor supports a specific layout.
@@ -1379,11 +1397,13 @@ protected:
                                          BusProperties& outNewBusProperties);
 
     //==============================================================================
+   #ifndef DOXYGEN
     /** @internal */
     std::atomic<AudioPlayHead*> playHead { nullptr };
 
     /** @internal */
     void sendParamChangeMessageToListeners (int parameterIndex, float newValue);
+   #endif
 
 public:
    #ifndef DOXYGEN
@@ -1488,6 +1508,8 @@ private:
 
     AudioProcessorParameterGroup parameterTree;
     Array<AudioProcessorParameter*> flatParameterList;
+    
+    std::unique_ptr<NativeWebView> nativeWebView;
 
     AudioProcessorParameter* getParamChecked (int) const;
 

@@ -1784,25 +1784,11 @@ public:
         {
             processorHolder = new AudioProcessorHolder (p);
             auto& processor = getAudioProcessor();
-            auto webConfig = processor.getEditorWebViewConfiguration();
 
-            if (! webConfig.url.isEmpty())
+            if (auto* webView = processor.getNativeWebView())
             {
-                NSView* nativeView;
-
-                {
-                    std::unique_ptr<NativeWebView> webview(new NativeWebView(nullptr, webConfig,
-                                                                             [] (NativeWebView& view, int width, int height)
-                                                                             {
-                                                                                 view.setBounds(juce::Rectangle<int>(0, 0, width, height));
-                                                                             }));
-
-                    // transfer the ownership of the NativeWebView cpp object to the
-                    // NSView* itself
-                    nativeView = static_cast<NSView*>(NativeWebView::transferOwnershipToNativeView(std::move(webview)));
-                    [nativeView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
-                }
-                [myself setView: nativeView];
+                webView->setResizeRequestCallback (webView->defaultSizeRequestHandler);
+                [myself setView: static_cast<NSView*>(webView->getNativeView())];
             }
         }
     }

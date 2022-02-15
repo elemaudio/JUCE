@@ -28,29 +28,33 @@ class NativeWebView
 {
 public:
     //==============================================================================
-    NativeWebView(void* parentNativeWindow,
-                  WebViewConfiguration const& webViewConfig,
-                  std::function<void (NativeWebView&, int, int)> && resizeCallback);
+    NativeWebView(WebViewConfiguration const& webViewConfig,
+                  std::function<void ()> && loadFinished,
+                  std::function<void (String const&)> && messageReceived);
     ~NativeWebView();
 
     //==============================================================================
     void setBounds(Rectangle<int> const&);
     Rectangle<int> getBounds();
-
+    void setResizeRequestCallback(std::weak_ptr<std::function<void (NativeWebView&, int, int)>> && cb);
+    std::shared_ptr<std::function<void (NativeWebView&, int, int)>> defaultSizeRequestHandler;
+    
+    //==============================================================================
+    void sendMessage(String const&);
+    
+    //==============================================================================
+    void attachToParent(void* nativeParent);
+    void detachFromParent();
+    bool isAttached() const noexcept;
+    
    #if JUCE_MAC || JUCE_IOS
-    // transfers the ownership of the nativeWebView to the underlying native NSView itself
-    // (i.e. when the NSView is deleted, the instance of NativeWebView is also deleted).
-    // This function returns an autoreleased NSView pointer.
-    static void* transferOwnershipToNativeView(std::unique_ptr<NativeWebView> && nativeWebView);
-
-    // if (and only if) the ownership was transferred, then the NativeWebView pointer
-    // can be acquired from the native view itself.
-    static NativeWebView* getWebViewObjFromNSView(void* nativeView);
+    void* getNativeView();
    #endif
 
     class Impl;
 private:
     void finishLoading();
+    void defaultSizeHandler(NativeWebView&, int, int);
     void messageReceived(String const&);
 
     //==============================================================================
@@ -58,8 +62,11 @@ private:
 
     //==============================================================================
     WebViewConfiguration config;
-    std::function<void (NativeWebView&, int, int)> resize;
+    std::function<void ()> finished;
+    std::function<void (String const&)> msgReceived;
+    std::weak_ptr<std::function<void (NativeWebView&, int, int)>> resize;
     std::unique_ptr<Impl> nativeImpl;
+    bool attached = false;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NativeWebView)

@@ -38,7 +38,10 @@
 #define JUCE_CORE_INCLUDE_COM_SMART_PTR 1
 
 #include "juce_audio_utils.h"
-#include <juce_gui_extra/juce_gui_extra.h>
+
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+ #include <juce_gui_extra/juce_gui_extra.h>
+#endif
 
 #if JUCE_MAC
   #import <DiscRecording/DiscRecording.h>
@@ -54,20 +57,25 @@
  #endif
 #endif
 
-#include "gui/juce_AudioDeviceSelectorComponent.cpp"
-#include "gui/juce_AudioThumbnail.cpp"
-#include "gui/juce_AudioThumbnailCache.cpp"
-#include "gui/juce_AudioVisualiserComponent.cpp"
-#include "gui/juce_KeyboardComponentBase.cpp"
-#include "gui/juce_MidiKeyboardComponent.cpp"
-#include "gui/juce_MPEKeyboardComponent.cpp"
-#include "gui/juce_AudioAppComponent.cpp"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+ #include "gui/juce_AudioDeviceSelectorComponent.cpp"
+ #include "gui/juce_AudioThumbnail.cpp"
+ #include "gui/juce_AudioThumbnailCache.cpp"
+ #include "gui/juce_AudioVisualiserComponent.cpp"
+ #include "gui/juce_KeyboardComponentBase.cpp"
+ #include "gui/juce_MidiKeyboardComponent.cpp"
+ #include "gui/juce_MPEKeyboardComponent.cpp"
+ #include "gui/juce_AudioAppComponent.cpp"
+#endif
+
 #include "players/juce_SoundPlayer.cpp"
 #include "players/juce_AudioProcessorPlayer.cpp"
 #include "audio_cd/juce_AudioCDReader.cpp"
 
 #if JUCE_MAC
- #include "native/juce_mac_BluetoothMidiDevicePairingDialogue.mm"
+ #if JUCE_MODULE_AVAILABLE_juce_gui_extra
+  #include "native/juce_mac_BluetoothMidiDevicePairingDialogue.mm"
+ #endif
 
  #if JUCE_USE_CDREADER
   #include "native/juce_mac_AudioCDReader.mm"
@@ -78,20 +86,28 @@
  #endif
 
 #elif JUCE_IOS
- #include "native/juce_ios_BluetoothMidiDevicePairingDialogue.mm"
+ #if JUCE_MODULE_AVAILABLE_juce_gui_extra
+  #include "native/juce_ios_BluetoothMidiDevicePairingDialogue.mm"
+ #endif
 
 #elif JUCE_ANDROID
- #include "native/juce_android_BluetoothMidiDevicePairingDialogue.cpp"
+ #if JUCE_MODULE_AVAILABLE_juce_gui_extra
+  #include "native/juce_android_BluetoothMidiDevicePairingDialogue.cpp"
+ #endif
 
 #elif JUCE_LINUX || JUCE_BSD
  #if JUCE_USE_CDREADER
   #include "native/juce_linux_AudioCDReader.cpp"
  #endif
 
- #include "native/juce_linux_BluetoothMidiDevicePairingDialogue.cpp"
+ #if JUCE_MODULE_AVAILABLE_juce_gui_extra
+  #include "native/juce_linux_BluetoothMidiDevicePairingDialogue.cpp"
+ #endif
 
 #elif JUCE_WINDOWS
- #include "native/juce_win_BluetoothMidiDevicePairingDialogue.cpp"
+ #if JUCE_MODULE_AVAILABLE_juce_gui_extra
+  #include "native/juce_win_BluetoothMidiDevicePairingDialogue.cpp"
+ #endif
 
  #if JUCE_USE_CDREADER
   #include "native/juce_win32_AudioCDReader.cpp"

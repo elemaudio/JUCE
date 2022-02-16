@@ -11,14 +11,12 @@ juce_add_plugin(GainPlugin
     PLUGIN_MANUFACTURER_CODE Manu
     PLUGIN_CODE Yc8b
     APP_SANDBOX_ENABLED On
-    APP_SANDBOX_OPTIONS com.apple.security.network.client com.apple.security.network.server)
+    APP_SANDBOX_OPTIONS com.apple.security.network.client com.apple.security.network.server com.apple.security.device.audio-input)
     
 target_sources(GainPlugin PRIVATE Source/Main.cpp Source/GainPluginDemo.h)
 
 target_link_libraries(GainPlugin PRIVATE
-    juce::juce_audio_basics
     juce::juce_audio_plugin_client
-    juce::juce_audio_processors
     juce::juce_core
     juce::juce_data_structures
     juce::juce_events

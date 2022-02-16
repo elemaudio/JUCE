@@ -42,7 +42,7 @@
   license:            GPL/Commercial
   minimumCppStandard: 14
 
-  dependencies:       juce_audio_processors
+  dependencies:       juce_audio_processors juce_audio_utils
   OSXFrameworks:      Carbon CoreAudioKit
 
  END_JUCE_MODULE_DECLARATION

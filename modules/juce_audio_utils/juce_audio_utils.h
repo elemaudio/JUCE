@@ -75,16 +75,19 @@
 #endif
 
 //==============================================================================
-#include "gui/juce_AudioDeviceSelectorComponent.h"
-#include "gui/juce_AudioThumbnailBase.h"
-#include "gui/juce_AudioThumbnail.h"
-#include "gui/juce_AudioThumbnailCache.h"
-#include "gui/juce_AudioVisualiserComponent.h"
-#include "gui/juce_KeyboardComponentBase.h"
-#include "gui/juce_MidiKeyboardComponent.h"
-#include "gui/juce_MPEKeyboardComponent.h"
-#include "gui/juce_AudioAppComponent.h"
-#include "gui/juce_BluetoothMidiDevicePairingDialogue.h"
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+ #include "gui/juce_AudioDeviceSelectorComponent.h"
+ #include "gui/juce_AudioThumbnailBase.h"
+ #include "gui/juce_AudioThumbnail.h"
+ #include "gui/juce_AudioThumbnailCache.h"
+ #include "gui/juce_AudioVisualiserComponent.h"
+ #include "gui/juce_KeyboardComponentBase.h"
+ #include "gui/juce_MidiKeyboardComponent.h"
+ #include "gui/juce_MPEKeyboardComponent.h"
+ #include "gui/juce_AudioAppComponent.h"
+ #include "gui/juce_BluetoothMidiDevicePairingDialogue.h"
+#endif
+
 #include "players/juce_SoundPlayer.h"
 #include "players/juce_AudioProcessorPlayer.h"
 #include "audio_cd/juce_AudioCDBurner.h"

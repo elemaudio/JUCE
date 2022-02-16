@@ -43,7 +43,7 @@
   minimumCppStandard: 14
 
   dependencies:       juce_audio_processors
-  OSXFrameworks:      Carbon
+  OSXFrameworks:      Carbon CoreAudioKit
 
  END_JUCE_MODULE_DECLARATION
 

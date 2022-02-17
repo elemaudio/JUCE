@@ -24,14 +24,14 @@
 */
 namespace juce
 {
-class NativeWebView
+class NativeWebView  : private Timer
 {
 public:
     //==============================================================================
     NativeWebView(WebViewConfiguration const& webViewConfig,
                   std::function<void ()> && loadFinished,
                   std::function<void (String const&)> && messageReceived);
-    ~NativeWebView();
+    ~NativeWebView() override;
 
     //==============================================================================
     void setBounds(Rectangle<int> const&);
@@ -56,6 +56,8 @@ private:
     void finishLoading();
     void defaultSizeHandler(NativeWebView&, int, int);
     void messageReceived(String const&);
+    void timerCallback() override;
+    void checkNativeImpl();
 
     //==============================================================================
     friend class Impl;

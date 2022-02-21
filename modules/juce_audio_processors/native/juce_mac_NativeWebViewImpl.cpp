@@ -151,8 +151,6 @@ public:
 
     void load(URL const& url)
     {
-        ObjCMsgSendSuper<NSView, void> (objcInstance, @selector (viewDidMoveToSuperview));
-
         std::unique_ptr<NSURL, NSObjectDeleter> nsUrl ([[NSURL alloc] initWithString:juceStringToNS(url.toString(true))]);
         std::unique_ptr<NSURLRequest, NSObjectDeleter> req ([[NSURLRequest alloc] initWithURL:nsUrl.get()]);
 
@@ -197,12 +195,33 @@ private:
     }
 
     //==============================================================================
-    void viewDidMoveToSuperview() {}
+    bool acceptsFirstResponder()
+    {
+        return true;
+    }
+    
+    void keyDown(NSEvent* event)
+    {
+        if (pluginHostType.isAbletonLive()) {
+            // Don't let Ableton Live process the ESC key event as it will close the
+            // WekKitView while the ESC key is being processed. Grab this key event
+            // before it gets to the WebKitView and do the same thing that Ableton
+            // does when hitting ESC (i.e. closing the plug-in window).
+            if([event keyCode] == 53) {
+                [[objcInstance window] performClose:objcInstance];
+                return;
+            }
+        }
+        
+        // pass on the event
+        ObjCMsgSendSuper<WKWebView, void> (objcInstance, @selector (keyDown:), event);
+    }
 
     //==============================================================================
     WKWebView* objcInstance;
     std::unique_ptr<NSObject<WKScriptMessageHandler>, NSObjectDeleter> messageHandler;
     NativeWebView::Impl::Callbacks callbacks;
+    PluginHostType pluginHostType;
 
     //==============================================================================
     struct InitializationParams {
@@ -230,7 +249,8 @@ private:
             addMethod (@selector (dealloc),                                        dealloc);
 
             //==============================================================================
-            addMethod (@selector (viewDidMoveToSuperview),                         _viewDidMoveToSuperview);
+            addMethod (@selector (acceptsFirstResponder),                          _acceptsFirstResponder);
+            addMethod (@selector (keyDown:),                          _keyDown);
 
             registerClass();
         }
@@ -291,7 +311,8 @@ private:
             return cls;
         }
 
-        static void _viewDidMoveToSuperview(id self, SEL) { _this(self)->viewDidMoveToSuperview(); }
+        static BOOL _acceptsFirstResponder(id self, SEL) { return _this(self)->acceptsFirstResponder() ? YES : NO; }
+        static void _keyDown(id self, SEL, NSEvent* event) { return _this(self)->keyDown(event); }
     };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebkitView)

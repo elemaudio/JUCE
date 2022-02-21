@@ -67,6 +67,21 @@ public:
     }
 
     void quit() {
+        if (standaloneAudio != nullptr)
+            standaloneAudio->detachWebView();
+
+        if (auto* webView = audioProcessor->getNativeWebView())
+            webView->detachFromParent();
+
+        if (settingsWindow.get() != nullptr) {
+            [settingsWindow.get() close];
+        }
+
+        if (mainWindow.get() != nullptr) {
+            [mainWindow.get() close];
+        }
+        
+        isRunning = false;
         [app stop:objCInstance];
     }
 
@@ -79,6 +94,12 @@ public:
         static Class cls;
         return std::unique_ptr<ObjCClassType, NSObjectDeleter> ([cls.createInstance() init]);
     }
+
+    static StandalonePlugInApp* cobj(ObjCClassType* _self) {
+        return Class::_this(_self);
+    }
+
+    bool isRunning = true;
 private:
     void setupWindow()
     {
@@ -96,6 +117,7 @@ private:
             webView->attachToParent(parentView);
             
             [[[parentView subviews] objectAtIndex:0] setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
+            [mainWindow.get() setReleasedWhenClosed:NO];
             [mainWindow.get() center];
             [mainWindow.get() makeKeyAndOrderFront:objCInstance];
         }
@@ -149,7 +171,7 @@ private:
     {
         NSWindow* parentWindow = nullptr;
 
-        if      (&nv == nativeWebView.get())                 parentWindow = mainWindow.get();
+        if      (&nv == audioProcessor->getNativeWebView())  parentWindow = mainWindow.get();
         else if (&nv == &standaloneAudio->getSettingsView()) parentWindow = settingsWindow.get();
         else { jassertfalse; return; }
 
@@ -170,7 +192,6 @@ private:
     ApplicationProperties appProperties;
     std::unique_ptr<AudioProcessor> audioProcessor;
     std::unique_ptr<StandaloneAudio> standaloneAudio;
-    std::unique_ptr<NativeWebView> nativeWebView;
     std::unique_ptr<NSWindow, NSObjectDeleter> mainWindow;
     std::unique_ptr<NSWindow, NSObjectDeleter> settingsWindow;
     std::shared_ptr<std::function<void (NativeWebView&, int, int)>> resizeCallback;
@@ -229,9 +250,19 @@ private:
 
 //==============================================================================
 int main() {
-    std::unique_ptr<NSAutoreleasePool, NSObjectDeleter> pool([[NSAutoreleasePool alloc] init]);
-    auto app = StandalonePlugInApp::createInstance();
-    [NSApp run];
+    {
+        std::unique_ptr<NSObject<NSApplicationDelegate>, NSObjectDeleter> app;
+
+        {
+            std::unique_ptr<NSAutoreleasePool, NSObjectDeleter> pool([[NSAutoreleasePool alloc] init]);
+            app = StandalonePlugInApp::createInstance();
+        }
+
+        while (StandalonePlugInApp::cobj(app.get())->isRunning) {
+            std::unique_ptr<NSAutoreleasePool, NSObjectDeleter> pool([[NSAutoreleasePool alloc] init]);
+            [NSApp run];
+        }
+    }
 
     return 0;
 }

@@ -57,6 +57,9 @@ public:
         return settingsView;
     }
 
+    void detachWebView() {
+        settingsView.detachFromParent();
+    }
 private:
     //==============================================================================
     static WebViewConfiguration getAudioSettingsWebViewConfiguration()

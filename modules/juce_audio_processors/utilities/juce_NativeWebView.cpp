@@ -98,22 +98,25 @@ NativeWebView::NativeWebView(WebViewConfiguration const& webViewConfig,
     : defaultSizeRequestHandler(std::make_shared<std::function<void (NativeWebView&, int, int)>>([this] (NativeWebView& nv, int w, int h) { defaultSizeHandler(nv, w, h); })),
       config (webViewConfig),
       finished (std::move (loadFinished)),
-      msgReceived (std::move (receivedCb))
-{
-    startTimer(50);
-}
+      msgReceived (std::move (receivedCb)),
+      nativeImpl(Impl::create(webViewConfig.size,
+                              webViewConfig.url,
+                              javascriptInjection,
+                              {
+                                 [this] () { finishLoading(); },
+                                 [this] (String const& msg) { messageReceived (msg); }
+                              }))
+{}
 
 NativeWebView::~NativeWebView() = default;
 
 void NativeWebView::setBounds(Rectangle<int> const& rc)
 {
-    checkNativeImpl();
     nativeImpl->setBounds (rc);
 }
 
 Rectangle<int> NativeWebView::getBounds()
 {
-    checkNativeImpl();
     return nativeImpl->getBounds();
 }
 
@@ -124,14 +127,15 @@ void NativeWebView::setResizeRequestCallback(std::weak_ptr<std::function<void (N
 
 void NativeWebView::sendMessage(String const& msg)
 {
-    if (nativeImpl != nullptr)
-        nativeImpl->executeJS("juceBridgeOnMessage", msg);
+    nativeImpl->executeJS("juceBridgeOnMessage", msg);
 }
 
 void NativeWebView::finishLoading()
 {
     if (finished)
+    {
         finished();
+    }
 }
 
 void NativeWebView::defaultSizeHandler(NativeWebView&, int w, int h)
@@ -171,7 +175,6 @@ void NativeWebView::messageReceived(String const& msg)
 
 void NativeWebView::attachToParent(void* nativeParent)
 {
-    checkNativeImpl();
     if (std::exchange(attached, true))
     {
         // multiple editors for a single plug-in instance
@@ -197,31 +200,9 @@ bool NativeWebView::isAttached() const noexcept
 #if JUCE_MAC || JUCE_IOS
 void* NativeWebView::getNativeView()
 {
-    checkNativeImpl();
     return nativeImpl->getNativeView();
 }
 #endif
-
-void NativeWebView::checkNativeImpl()
-{
-    stopTimer();
-
-    jassert(MessageManager::existsAndIsCurrentThread());
-    if (nativeImpl == nullptr) {
-        nativeImpl = Impl::create(config.size,
-                                  config.url,
-                                  javascriptInjection,
-                                  {
-                                      [this] () { finishLoading(); },
-                                      [this] (String const& msg) { messageReceived (msg); }
-                                  });
-    }
-}
-
-void NativeWebView::timerCallback()
-{
-    checkNativeImpl();
-}
 
 //==============================================================================
 void NativeWebView::Impl::executeJS(String const& functionName, String const& param)

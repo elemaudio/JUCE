@@ -168,7 +168,8 @@ public:
 
     Rectangle<int> getBounds() {
         auto bounds = [objcInstance frame];
-        return Rectangle<int>(bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height);
+        return Rectangle<int>(static_cast<int>(bounds.origin.x), static_cast<int>(bounds.origin.y),
+                              static_cast<int>(bounds.size.width), static_cast<int>(bounds.size.height));
     }
 
     void evalJS(String const& javascript)

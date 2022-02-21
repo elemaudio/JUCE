@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(GainPlugin VERSION 0.1)
 
+set(CMAKE_CXX_STANDARD 17)
+
 find_package(juce CONFIG REQUIRED)
 
 juce_set_vst2_sdk_path(/Users/fr810/Development/SDKs/VST3_SDK)

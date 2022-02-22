@@ -30,11 +30,7 @@ constexpr char javascriptInjection[] =
 R"END(
 var juceBridge = {
     postMessage: function (param) {
-        juceBridgeInternalMessage("message:" + param);
-    },
-
-    resizeTo: function (width, height) {
-        juceBridgeInternalMessage("resize:" + width.toString() + "," + height.toString());
+        juceBridgeInternalMessage(param);
     }
 };
 )END";
@@ -93,19 +89,12 @@ namespace juce
 
 //==============================================================================
 NativeWebView::NativeWebView(WebViewConfiguration const& webViewConfig,
-                             std::function<void ()> && loadFinished,
                              std::function<void (String const&)> && receivedCb)
-    : defaultSizeRequestHandler(std::make_shared<std::function<void (NativeWebView&, int, int)>>([this] (NativeWebView& nv, int w, int h) { defaultSizeHandler(nv, w, h); })),
-      config (webViewConfig),
-      finished (std::move (loadFinished)),
-      msgReceived (std::move (receivedCb)),
+    : config (webViewConfig),
       nativeImpl(Impl::create(webViewConfig.size,
                               webViewConfig.url,
                               javascriptInjection,
-                              {
-                                 [this] () { finishLoading(); },
-                                 [this] (String const& msg) { messageReceived (msg); }
-                              }))
+                              std::move(receivedCb)))
 {}
 
 NativeWebView::~NativeWebView() = default;
@@ -120,57 +109,9 @@ Rectangle<int> NativeWebView::getBounds()
     return nativeImpl->getBounds();
 }
 
-void NativeWebView::setResizeRequestCallback(std::weak_ptr<std::function<void (NativeWebView&, int, int)>> && cb)
-{
-    resize = std::move(cb);
-}
-
 void NativeWebView::sendMessage(String const& msg)
 {
     nativeImpl->executeJS("juceBridgeOnMessage", msg);
-}
-
-void NativeWebView::finishLoading()
-{
-    if (finished)
-    {
-        finished();
-    }
-}
-
-void NativeWebView::defaultSizeHandler(NativeWebView&, int w, int h)
-{
-    Rectangle<int> rc (0, 0, w, h);
-    setBounds(rc);
-}
-
-void NativeWebView::messageReceived(String const& msg)
-{
-    auto deliminator = msg.indexOfChar(':');
-
-    if (deliminator == -1)
-        return;
-
-    auto cmd = msg.substring(0, deliminator);
-    auto arg = msg.substring(deliminator + 1);
-
-    if (cmd == "message") {
-        if (msgReceived)
-            msgReceived(arg);
-    } else if (cmd == "resize") {
-        auto size = ::juce::StringArray::fromTokens(arg, ",", {});
-
-        if (size.size() < 2)
-            return;
-
-        auto width  = size[0].getIntValue();
-        auto height = size[1].getIntValue();
-
-        if (auto cb = resize.lock()) {
-            if (*cb)
-                (*cb) (*this, width, height);
-        }
-    }
 }
 
 void NativeWebView::attachToParent(void* nativeParent)

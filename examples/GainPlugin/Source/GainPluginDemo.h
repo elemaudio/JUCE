@@ -130,8 +130,11 @@ public:
             
             if      (param == "gain")   gain->setValueNotifyingHost(value);
             else if (param == "bypass") bypass->setValueNotifyingHost(value);
-        } else if (msg == "update") {
+        } else if (msg == "onload") {
             triggerAsyncUpdate();
+        } else if (msg == "resize") {
+            auto size = StringArray::fromTokens(args[1], ",", {});
+            resizeWebView(Rectangle<int>(size[0].getIntValue(), size[1].getIntValue()));
         }
     }
 
@@ -177,14 +180,14 @@ private:
                     }
                     
                     window.onload = function () {
-                        juceBridge.postMessage("update");
+                        juceBridge.postMessage("onload");
                     }
                 </script>
                 <input type="checkbox" id="bypass" name="bypass" onchange="juceBridge.postMessage('param@bypass@' + (this.checked ? '1' : '0'))"/>
                 <label for="bypass">Bypass</label><br/>
                 <input type="range" id="gain" value = "0" name="gain" min="0" max="100" oninput="juceBridge.postMessage('param@gain@' + (this.value / 100.))"/>
                 <label for="range">Gain</label><br/>
-                <button name = "button" value = "Resize" type = "button" onclick="juceBridge.resizeTo(800, 400)">Resize!</button>
+                <button name = "button" value = "Resize" type = "button" onclick="juceBridge.postMessage('resize@' + 800 + ',' + 400)">Resize!</button>
                 </center>
                 </body>
                 </html>

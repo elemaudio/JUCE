@@ -48,7 +48,7 @@ public:
     StandalonePlugInApp(ObjCClassType* _self)
        : objCInstance(_self), app([NSApplication sharedApplication]),
          audioProcessor(::createPluginFilter()),
-         resizeCallback(std::make_shared<std::function<void (NativeWebView&, int, int)>>([this] (NativeWebView& nv, int w, int h) { webViewResizeCallback(nv, w, h); }))
+         resizeCallback(std::make_shared<std::function<void (NativeWebView&, Rectangle<int> const&)>>([this] (NativeWebView& nv, Rectangle<int> const& rc) { webViewResizeCallback(nv, rc); }))
     {
         [app setDelegate:objCInstance];
 
@@ -59,7 +59,7 @@ public:
 
         appProperties.setStorageParameters(options);
 
-        standaloneAudio = std::make_unique<StandaloneAudio>(*audioProcessor, appProperties);
+        standaloneAudio = std::make_unique<StandaloneAudio>(*audioProcessor, appProperties, [this] (Rectangle<int> const& rc) { resizeSettingsWindow(rc); });
 
         setupMenuBar();
         setupWindow();
@@ -105,6 +105,7 @@ private:
     {
         if (auto* webView = audioProcessor->getNativeWebView())
         {
+            audioProcessor->setResizeRequestCallback(resizeCallback);
             auto jbounds = webView->getBounds();
             auto contentRect = NSMakeRect(0, 0, jbounds.getWidth(), jbounds.getHeight());
             mainWindow.reset([[NSWindow alloc] initWithContentRect:contentRect
@@ -113,7 +114,6 @@ private:
                                                              defer:YES]);
             
             auto* parentView = [mainWindow.get() contentView];
-            webView->setResizeRequestCallback (resizeCallback);
             webView->attachToParent(parentView);
             
             [[[parentView subviews] objectAtIndex:0] setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
@@ -140,7 +140,6 @@ private:
         [settingsWindow.get() center];
         
         auto* parentView = [settingsWindow.get() contentView];
-        settingsView.setResizeRequestCallback (resizeCallback);
         settingsView.attachToParent(parentView);
     }
 
@@ -167,21 +166,25 @@ private:
     }
     
     //==============================================================================
-    void webViewResizeCallback(NativeWebView& nv, int w, int h)
+    void webViewResizeCallback(NativeWebView& nv, Rectangle<int> const& rc)
     {
-        NSWindow* parentWindow = nullptr;
+        auto oldFrame = [mainWindow.get() frame];
+        auto deltaX = rc.getWidth() - oldFrame.size.width;
+        auto deltaY = rc.getHeight() - oldFrame.size.height;
+        [mainWindow.get() setFrame:NSMakeRect(oldFrame.origin.x - (deltaX / 2),
+                                              oldFrame.origin.y - (deltaY / 2),
+                                               rc.getWidth(), rc.getHeight())
+                       display:YES];
+    }
 
-        if      (&nv == audioProcessor->getNativeWebView())  parentWindow = mainWindow.get();
-        else if (&nv == &standaloneAudio->getSettingsView()) parentWindow = settingsWindow.get();
-        else { jassertfalse; return; }
-
-
-        auto oldFrame = [parentWindow frame];
-        auto deltaX = w - oldFrame.size.width;
-        auto deltaY = w - oldFrame.size.width;
-        [parentWindow setFrame:NSMakeRect(oldFrame.origin.x - (deltaX / 2),
-                                          oldFrame.origin.y - (deltaY / 2),
-                                          w, h)
+    void resizeSettingsWindow(Rectangle<int> const& rc)
+    {
+        auto oldFrame = [settingsWindow.get() frame];
+        auto deltaX = rc.getWidth()  - oldFrame.size.width;
+        auto deltaY = rc.getHeight() - oldFrame.size.height;
+        [settingsWindow.get() setFrame:NSMakeRect(oldFrame.origin.x - (deltaX / 2),
+                                                  oldFrame.origin.y - (deltaY / 2),
+                                                   rc.getWidth(), rc.getHeight())
                        display:YES];
     }
 
@@ -194,7 +197,7 @@ private:
     std::unique_ptr<StandaloneAudio> standaloneAudio;
     std::unique_ptr<NSWindow, NSObjectDeleter> mainWindow;
     std::unique_ptr<NSWindow, NSObjectDeleter> settingsWindow;
-    std::shared_ptr<std::function<void (NativeWebView&, int, int)>> resizeCallback;
+    std::shared_ptr<std::function<void (NativeWebView&, Rectangle<int> const&)>> resizeCallback;
 
     //==============================================================================
     struct Class  : public ObjCClass<ObjCClassType>

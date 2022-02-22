@@ -39,12 +39,12 @@ public:
     LinuxWebView(Rectangle<int> const& initialBounds,
                  URL const& url,
                  String const& jsBootstrap,
-                 Callbacks && jsCallbacks)
+                 std::function<void (String const&)> && messageReceivedCallback)
       : fixed(gtk_fixed_new(), gtk_widget_destroy),
         wkView(webkit_web_view_new(), gtk_widget_destroy),
         jsCancellable(g_cancellable_new(), [] (GCancellable* obj) { g_cancellable_cancel (obj); g_object_unref (obj); }),
         currentBounds(initialBounds),
-        callbacks(std::move(jsCallbacks))
+        messageReceived(std::move(messageReceivedCallback))
     {
         gtk_fixed_put(reinterpret_cast<GtkFixed*>(fixed.get()), wkView.get(), 0, 0);
         setBounds(currentBounds);
@@ -117,7 +117,7 @@ public:
     }
 private:
     void scriptMessageReceived(WebKitUserContentManager*, WebKitJavascriptResult* wkResult) {
-        if (! callbacks.messageReceived)
+        if (! messageReceived)
           return;
 
         auto* jsResult = webkit_javascript_result_get_js_value(wkResult);
@@ -126,7 +126,7 @@ private:
             return;
         }
 
-        callbacks.messageReceived (jsc_value_to_string(jsResult));
+        messageReceived (jsc_value_to_string(jsResult));
     }
 
     static void staticScriptMessageReceived(WebKitUserContentManager* manager, WebKitJavascriptResult* msg, gpointer userData) {
@@ -136,9 +136,6 @@ private:
     //==============================================================================
     void bootstrap(GAsyncResult*) {
         jsInjection.clear();
-
-        if (callbacks.finishLoading)
-            callbacks.finishLoading();
     }
 
     static void staticBootstrap (GObject*, GAsyncResult* res, gpointer userData)
@@ -178,7 +175,7 @@ private:
     std::unique_ptr<GCancellable, void (*)(GCancellable*)> jsCancellable;
     String jsInjection;
     Rectangle<int> currentBounds;
-    Callbacks callbacks;
+    std::function<void (String const&)> messageReceived;
     std::unique_ptr<GtkWidget, void (*)(GtkWidget*)> plug = {nullptr, gtk_widget_destroy};
 
     //==============================================================================
@@ -188,7 +185,7 @@ private:
 std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(Rectangle<int> const& initialBounds,
                                                                  URL const& url,
                                                                  String const& jsBootstrap,
-                                                                 NativeWebView::Impl::Callbacks && callbacks) {
-    return std::make_unique<LinuxWebView> (initialBounds, url, jsBootstrap, std::move(callbacks));
+                                                                 std::function<void (String const&)> && messageReceived) {
+    return std::make_unique<LinuxWebView> (initialBounds, url, jsBootstrap, std::move(messageReceived));
 }
 }

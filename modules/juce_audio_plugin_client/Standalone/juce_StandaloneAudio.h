@@ -27,10 +27,11 @@
 class StandaloneAudio   : private Timer
 {
 public:
-    StandaloneAudio(AudioProcessor& audioProcessor, ApplicationProperties& applicationProperties)
+    StandaloneAudio(AudioProcessor& audioProcessor, ApplicationProperties& applicationProperties,
+                    std::function<void (Rectangle<int> const&)> && resizeCallback)
         : deviceManager(std::make_shared<AudioDeviceManager>()),
-          appProperties(applicationProperties),
-          settingsView(getAudioSettingsWebViewConfiguration(), {}, [this] (String const& msg) { receivedMessage(msg); })
+          appProperties(applicationProperties), resizeCb(std::move(resizeCallback)),
+          settingsView(getAudioSettingsWebViewConfiguration(), [this] (String const& msg) { receivedMessage(msg); })
     {
         processorPlayer.setProcessor(&audioProcessor);
         deviceManager->addAudioCallback(&processorPlayer);
@@ -215,7 +216,16 @@ private:
         auto params = json["params"];
         auto message = messageValue.toString();
         
-        if (message == "onLoad") {
+        if (message == "resize") {
+            if (auto* jsRect = params.getArray()) {
+                Rectangle<int> juceRect(static_cast<int>((*jsRect)[0]), static_cast<int>((*jsRect)[1]),
+                                        static_cast<int>((*jsRect)[2]), static_cast<int>((*jsRect)[3]));
+
+                if (resizeCb) {
+                    resizeCb(juceRect);
+                }
+            }
+        } else if (message == "onLoad") {
             updateAudioSettingsView();
             startTimer(500);
         } else if (message == "playTestTone") {
@@ -291,6 +301,7 @@ private:
     //==============================================================================
     AudioProcessorPlayer processorPlayer;
     ApplicationProperties& appProperties;
+    std::function<void (Rectangle<int> const&)> resizeCb;
     std::shared_ptr<AudioDeviceManager> deviceManager;
     NativeWebView settingsView;
     String previousDeviceStatus;

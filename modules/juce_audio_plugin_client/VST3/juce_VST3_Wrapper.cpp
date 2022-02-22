@@ -631,10 +631,8 @@ public:
     WebViewEditor (NativeWebView& nativeWebView, Vst::EditController* ec, ViewRect& webViewBounds)
         : Vst::EditorView (ec, &webViewBounds),
           webView(nativeWebView),
-          resizeCb(std::make_shared<std::function<void (NativeWebView&, int w, int h)>>([this] (NativeWebView& n, int w, int h) { webViewResizeCallback (n, w, h); }))
-    {
-        webView.setResizeRequestCallback(resizeCb);
-    }
+          resizeCb(std::make_shared<std::function<void (NativeWebView&, Rectangle<int> const&)>>([this] (NativeWebView& n, Rectangle<int> const& rc) { webViewResizeCallback (n, rc); }))
+    {}
 
     REFCOUNT_METHODS (Vst::EditorView)
 
@@ -664,6 +662,7 @@ public:
         if (webView.isAttached())
             removed();
         
+        getProcessor().setResizeRequestCallback(resizeCb);
         webView.attachToParent(parent);
         
         return kResultTrue;
@@ -673,6 +672,7 @@ public:
     {
         if (webView.isAttached()) {
             webView.detachFromParent();
+            getProcessor().setResizeRequestCallback({});
         }
         
         return CPluginView::removed();
@@ -713,20 +713,22 @@ public:
     }
 
 private:
-    void webViewResizeCallback (NativeWebView&, int w, int h)
+    void webViewResizeCallback (NativeWebView&, Rectangle<int> const& bounds)
     {
         if (! webView.isAttached())
             return;
         
         if (plugFrame != nullptr) {
-            ViewRect rc (0, 0, w, h);
+            ViewRect rc (0, 0, bounds.getWidth(), bounds.getHeight());
             plugFrame->resizeView(this, &rc);
         }
     }
 
+    AudioProcessor& getProcessor();
+
     //==============================================================================
     NativeWebView& webView;
-    std::shared_ptr<std::function<void (NativeWebView&, int w, int h)>> resizeCb;
+    std::shared_ptr<std::function<void (NativeWebView&, Rectangle<int> const&)>> resizeCb;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebViewEditor)
@@ -1590,6 +1592,10 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JuceVST3EditController)
 };
+
+AudioProcessor& WebViewEditor::getProcessor() {
+    return *dynamic_cast<JuceVST3EditController*>(getController())->getPluginInstance();
+}
 
 namespace
 {

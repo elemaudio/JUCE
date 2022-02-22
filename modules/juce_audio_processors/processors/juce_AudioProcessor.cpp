@@ -49,9 +49,7 @@ AudioProcessor::AudioProcessor (const BusesProperties& ioConfig, WebViewConfigur
     
     if (! wv.url.isEmpty())
     {
-        nativeWebView = std::make_unique<NativeWebView>(wv,
-                                                        [this] () { webViewLoaded(); },
-                                                        [this] (String const& m) { webViewReceivedMessage(m); });
+        nativeWebView = std::make_unique<NativeWebView>(wv, [this] (String const& m) { webViewReceivedMessage(m); });
     }
 }
 
@@ -913,14 +911,23 @@ AudioProcessorEditor* AudioProcessor::createEditorIfNeeded()
 }
 #endif
 
-void AudioProcessor::webViewLoaded() {}
-
 void AudioProcessor::webViewReceivedMessage(String const&) {}
 
 void AudioProcessor::sendMessageToWebView(String const& msg)
 {
     if (nativeWebView)
         nativeWebView->sendMessage(msg);
+}
+
+void AudioProcessor::resizeWebView(Rectangle<int> const& rc)
+{
+    if (nativeWebView) {
+        if (auto resize = resizeCb.lock()) {
+            (*resize)(*nativeWebView, rc);
+        } else {
+            nativeWebView->setBounds(rc);
+        }
+    }
 }
 
 //==============================================================================
@@ -1309,6 +1316,11 @@ void AudioProcessor::sendParamChangeMessageToListeners (int parameterIndex, floa
 NativeWebView* AudioProcessor::getNativeWebView()
 {
     return nativeWebView.get();
+}
+
+void AudioProcessor::setResizeRequestCallback(std::weak_ptr<std::function<void (NativeWebView&, Rectangle<int> const&)>> && cb) 
+{
+    resizeCb = std::move(cb);
 }
 
 void AudioProcessor::beginParameterChangeGesture (int parameterIndex)

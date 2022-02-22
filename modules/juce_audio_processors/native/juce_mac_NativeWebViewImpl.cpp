@@ -119,10 +119,10 @@ class WebkitView
 public:
     WebkitView(WKWebView* objcClassInstance,
                std::unique_ptr<NSObject<WKScriptMessageHandler>, NSObjectDeleter> && scriptMessageHandler,
-               NativeWebView::Impl::Callbacks && jsCallbacks)
+               std::function<void (String const&)> && messageReceivedCb)
         : objcInstance(objcClassInstance),
           messageHandler (std::move (scriptMessageHandler)),
-          callbacks (std::move (jsCallbacks))
+          messageReceived (std::move (messageReceivedCb))
     {
         ScriptMessageHandler::Class::_this(messageHandler.get())->messageCallback
             = [this] (WKScriptMessage* msg)
@@ -140,9 +140,9 @@ public:
     static std::unique_ptr<WKWebView, NSObjectDeleter> createInstance(Rectangle<int> const& initialBounds,
                                                                       URL const& url,
                                                                       String const& jsBootstrap,
-                                                                      NativeWebView::Impl::Callbacks && callbacks)
+                                                                      std::function<void (String const&)> && messageReceivedCb)
     {
-        InitializationParams params(initialBounds, url, jsBootstrap, std::move(callbacks));
+        InitializationParams params(initialBounds, url, jsBootstrap, std::move(messageReceivedCb));
 
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wobjc-method-access")
         return std::unique_ptr<WKWebView, NSObjectDeleter> ([Class::get().createInstance() initWithInitializationParams:&params]);
@@ -155,9 +155,6 @@ public:
         std::unique_ptr<NSURLRequest, NSObjectDeleter> req ([[NSURLRequest alloc] initWithURL:nsUrl.get()]);
 
         [objcInstance loadRequest:req.get()];
-
-        if (callbacks.finishLoading)
-            callbacks.finishLoading();
     }
 
     void setBounds(Rectangle<int> const& newBounds) {
@@ -190,8 +187,8 @@ private:
 
         auto arg = nsStringToJuce((NSString*)[msg body]);
 
-        if (callbacks.messageReceived)
-            callbacks.messageReceived(arg);
+        if (messageReceived)
+            messageReceived(arg);
     }
 
     //==============================================================================
@@ -220,19 +217,19 @@ private:
     //==============================================================================
     WKWebView* objcInstance;
     std::unique_ptr<NSObject<WKScriptMessageHandler>, NSObjectDeleter> messageHandler;
-    NativeWebView::Impl::Callbacks callbacks;
+    std::function<void (String const&)> messageReceived;
     PluginHostType pluginHostType;
 
     //==============================================================================
     struct InitializationParams {
-        InitializationParams(Rectangle<int> const& bounds, URL const& u, String const& bootstrap, NativeWebView::Impl::Callbacks&& cb)
-            : initialBounds(bounds), url(u), jsBootstrap(bootstrap), callbacks(std::move(cb))
+        InitializationParams(Rectangle<int> const& bounds, URL const& u, String const& bootstrap, std::function<void (String const&)> && cb)
+            : initialBounds(bounds), url(u), jsBootstrap(bootstrap), messageReceivedCb(std::move(cb))
         {}
 
         Rectangle<int> const& initialBounds;
         URL const& url;
         String const& jsBootstrap;
-        NativeWebView::Impl::Callbacks callbacks;
+        std::function<void (String const&)> messageReceivedCb;
     };
 
     //==============================================================================
@@ -289,7 +286,7 @@ private:
 
                 self = ObjCMsgSendSuper<WKWebView, WKWebView*, CGRect, WKWebViewConfiguration*> (self, @selector (initWithFrame:configuration:), frame, wkConfig.get());
 
-                WebkitView* juceWK = new WebkitView (self, std::move (scriptMessageHandler), std::move (params.callbacks));
+                WebkitView* juceWK = new WebkitView (self, std::move (scriptMessageHandler), std::move (params.messageReceivedCb));
                 setThis (self, juceWK);
 
                 juceWK->load(params.url);
@@ -325,8 +322,8 @@ public:
     MacWebView(Rectangle<int> const& initialBounds,
                URL const& url,
                String const& jsBootstrap,
-               NativeWebView::Impl::Callbacks && callbacks)
-        : webView(WebkitView::createInstance(initialBounds, url, jsBootstrap, std::move(callbacks)))
+               std::function<void (String const&)> && messageReceived)
+        : webView(WebkitView::createInstance(initialBounds, url, jsBootstrap, std::move(messageReceived)))
     {}
 
     void setBounds(Rectangle<int> const& newBounds) override {
@@ -360,6 +357,6 @@ private:
 std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(Rectangle<int> const& initialBounds,
                                                                  URL const& url,
                                                                  String const& jsBootstrap,
-                                                                 NativeWebView::Impl::Callbacks && callbacks) {
-    return std::make_unique<MacWebView>(initialBounds, url, jsBootstrap, std::move(callbacks));
+                                                                 std::function<void (String const&)> && messageReceived) {
+    return std::make_unique<MacWebView>(initialBounds, url, jsBootstrap, std::move(messageReceived));
 }

@@ -1496,7 +1496,6 @@ public:
                 {
                     if (auto* webView = filter->getNativeWebView())
                     {
-                        webView->setResizeRequestCallback(webView->defaultSizeRequestHandler);
                         auto* nativeView = static_cast<NSView*>(webView->getNativeView());
                         [nativeView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
 

@@ -1786,10 +1786,7 @@ public:
             auto& processor = getAudioProcessor();
 
             if (auto* webView = processor.getNativeWebView())
-            {
-                webView->setResizeRequestCallback (webView->defaultSizeRequestHandler);
                 [myself setView: static_cast<NSView*>(webView->getNativeView())];
-            }
         }
     }
 

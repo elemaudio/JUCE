@@ -28,16 +28,10 @@ class NativeWebView::Impl
 {
 public:
     //==============================================================================
-    struct Callbacks {
-        std::function<void ()> finishLoading;
-        std::function<void (String const&)> messageReceived;
-    };
-
-    //==============================================================================
     static std::unique_ptr<Impl> create(Rectangle<int> const& initialBounds,
                                         URL const& url,
                                         String const& jsBootstrap,
-                                        Callbacks && callbacks);
+                                        std::function<void (String const&)> && messageReceived);
     virtual ~Impl() = default;
 
     //==============================================================================

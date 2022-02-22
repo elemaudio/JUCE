@@ -984,17 +984,15 @@ public:
     AudioProcessorEditor* createEditorIfNeeded();
    #endif
 
-    //==============================================================================
-    /** This method is called after the webview has fully loaded the page given by the URL in the constructor.
-        After receiving this callback you can now use sendMessageToWebView to send messages to your page.
-    */
-    virtual void webViewLoaded();
-    
+    //==============================================================================    
     /** Invoked when javascript code on your page sent you a message. */
     virtual void webViewReceivedMessage(String const& message);
     
     /** Use this method to send a message to your page. */
     void sendMessageToWebView(String const& message);
+
+    /** Use this method to resize the webview. */
+    void resizeWebView(Rectangle<int> const&);
 
     //==============================================================================
     /** Returns the default number of steps for a parameter.
@@ -1284,6 +1282,9 @@ public:
     
     /** @internal */
     NativeWebView* getNativeWebView();
+
+    /** @internal */
+    void setResizeRequestCallback(std::weak_ptr<std::function<void (NativeWebView&, Rectangle<int> const&)>> &&);
    #endif
 
 protected:
@@ -1510,6 +1511,7 @@ private:
     Array<AudioProcessorParameter*> flatParameterList;
     
     std::unique_ptr<NativeWebView> nativeWebView;
+    std::weak_ptr<std::function<void (NativeWebView&, Rectangle<int> const&)>> resizeCb;
 
     AudioProcessorParameter* getParamChecked (int) const;
 

@@ -120,15 +120,7 @@ static bool recursionCheck = false;
 namespace juce
 {
  #if JUCE_MAC
-  extern JUCE_API void initialiseMacVST();
-  extern JUCE_API void* attachComponentToWindowRefVST (Component*, void* parent, bool isNSView);
-  extern JUCE_API void detachComponentFromWindowRefVST (Component*, void* window, bool isNSView);
-  extern JUCE_API void setNativeHostWindowSizeVST (void* window, Component*, int newWidth, int newHeight, bool isNSView);
-  extern JUCE_API void checkWindowVisibilityVST (void* window, Component*, bool isNSView);
-  extern JUCE_API bool forwardCurrentKeyEventToHostVST (Component*, bool isNSView);
- #if ! JUCE_64BIT
-  extern JUCE_API void updateEditorCompBoundsVST (Component*);
- #endif
+  void resizeParentWindow(void* parentView, Rectangle<int> const& size);
  #endif
 
 #if JUCE_WINDOWS && JUCE_WIN_PER_MONITOR_DPI_AWARE
@@ -247,7 +239,8 @@ public:
     //==============================================================================
     JuceVSTWrapper (Vst2::audioMasterCallback cb, std::unique_ptr<AudioProcessor> af)
        : hostCallback (cb),
-         processor (std::move (af))
+         processor (std::move (af)),
+         webViewResizeCb(std::make_shared<std::function<void (NativeWebView&, juce::Rectangle<int> const&)>>([this] (NativeWebView& n, juce::Rectangle<int> const& rc) { webViewResizeCallback (n, rc); }))
     {
         inParameterChangedCallback = false;
 
@@ -1095,6 +1088,9 @@ private:
             {
                 if (auto* webView = processor->getNativeWebView())
                 {
+                    currentEditorParent = nullptr;
+                    processor->setResizeRequestCallback({});
+
                     if (webView->isAttached())
                         webView->detachFromParent();
                 }
@@ -1220,8 +1216,9 @@ private:
                 if (webView->isAttached())
                     webView->detachFromParent();
                 
-                webView->setResizeRequestCallback(webView->defaultSizeRequestHandler);
-                webView->attachToParent(args.ptr);
+                currentEditorParent = args.ptr;
+                processor->setResizeRequestCallback(webViewResizeCb);
+                webView->attachToParent(currentEditorParent);
                 
                 return 1;
             }
@@ -1237,11 +1234,23 @@ private:
         
         if (auto* webView = processor->getNativeWebView())
         {
+            currentEditorParent = nullptr;
+            processor->setResizeRequestCallback({});
             if (webView->isAttached())
                 webView->detachFromParent();
         }
         
         return 0;
+    }
+
+    void webViewResizeCallback(NativeWebView& n, juce::Rectangle<int> const& rc)
+    {
+       #if JUCE_MAC
+        if (currentEditorParent != nullptr) {
+            resizeParentWindow(currentEditorParent, rc);
+        }
+       #endif
+        n.setBounds(juce::Rectangle<int>(rc.getWidth(), rc.getHeight()));
     }
 
     pointer_sized_int handleGetData (VstOpCodeArguments args)
@@ -1679,6 +1688,8 @@ private:
     ThreadLocalValue<bool> inParameterChangedCallback;
 
     HostChangeUpdater hostChangeUpdater { *this };
+    std::shared_ptr<std::function<void (NativeWebView&, juce::Rectangle<int> const&)>> webViewResizeCb;
+    void* currentEditorParent = nullptr;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JuceVSTWrapper)

@@ -38,8 +38,8 @@ public:
     WinWebView(Rectangle<int> const& initialBounds,
                URL const& url,
                String const& jsBootstrap,
-               Callbacks && jsCallbacks)
-        : callbacks(std::move(jsCallbacks)),
+               std::function<void(String const&)>&& messageReceivedCallback)
+        : messageReceived(std::move(messageReceivedCallback)),
         windowClass(registerWindowClass()),
         parentWhenDetached(CreateWindowEx(0, 
                                           (LPCTSTR)(pointer_sized_uint)windowClass,
@@ -71,8 +71,8 @@ public:
         mWebView.Settings().IsScriptNotifyAllowed(true);
 
         mWebView.ScriptNotify([this](auto const&, auto const& args) {
-            if (callbacks.messageReceived)
-                callbacks.messageReceived(winrt::to_string(args.Value()));
+            if (messageReceived)
+                messageReceived(winrt::to_string(args.Value()));
         });
 
         String jsInjection;
@@ -85,11 +85,6 @@ public:
 
         mWebView.NavigationStarting([this, jsInjection](auto const&, auto const&) {
             mWebView.AddInitializeScript(winrt::to_hstring(jsInjection.toRawUTF8()));
-        });
-
-        mWebView.NavigationCompleted([this](auto const&, auto const&) {
-            if (callbacks.finishLoading)
-                callbacks.finishLoading();
         });
 
         mWebView.IsVisible(true);
@@ -199,7 +194,7 @@ private:
     }
 
     //==============================================================================
-    Callbacks callbacks;
+    std::function<void(String const&)> messageReceived;
     ::ATOM windowClass;
     ::HWND parentWhenDetached;
     ::HWND currentParent = nullptr;
@@ -213,7 +208,7 @@ private:
 std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(Rectangle<int> const& initialBounds,
                                                                  URL const& url,
                                                                  String const& jsBootstrap,
-                                                                 NativeWebView::Impl::Callbacks && callbacks) {
-    return std::make_unique<WinWebView> (initialBounds, url, jsBootstrap, std::move(callbacks));
+                                                                 std::function<void(String const&)> && messageReceived) {
+    return std::make_unique<WinWebView> (initialBounds, url, jsBootstrap, std::move(messageReceived));
 }
 }

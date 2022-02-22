@@ -707,8 +707,16 @@ public:
         return kResultTrue;
     }
 
-    tresult PLUGIN_API checkSizeConstraint (ViewRect* /*rectToCheck*/) override
+    tresult PLUGIN_API checkSizeConstraint (ViewRect* rectToCheck) override
     {
+        if (rectToCheck == nullptr)
+            return kResultFalse;
+
+        auto current = webView.getBounds();
+        Rectangle<int> requested(0, 0, rectToCheck->getWidth(), rectToCheck->getHeight());
+        auto constrained = getProcessor().webViewCheckSizeConstraint(current, requested);
+        *rectToCheck = ViewRect(0, 0, constrained.getWidth(), constrained.getHeight());
+
         return kResultTrue;
     }
 

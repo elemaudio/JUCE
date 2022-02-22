@@ -930,6 +930,11 @@ void AudioProcessor::resizeWebView(Rectangle<int> const& rc)
     }
 }
 
+Rectangle<int> AudioProcessor::webViewCheckSizeConstraint(Rectangle<int> const&, Rectangle<int> const& requested)
+{
+    return requested;
+}
+
 //==============================================================================
 void AudioProcessor::getCurrentProgramStateInformation (juce::MemoryBlock& destData)
 {

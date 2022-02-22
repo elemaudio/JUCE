@@ -43,7 +43,7 @@ using namespace juce;
 class StandalonePlugInApp
 {
 public:
-    using ObjCClassType = NSObject<NSApplicationDelegate>;
+    using ObjCClassType = NSObject<NSWindowDelegate, NSApplicationDelegate>;
 
     StandalonePlugInApp(ObjCClassType* _self)
        : objCInstance(_self), app([NSApplication sharedApplication]),
@@ -113,6 +113,7 @@ private:
                                                            backing:NSBackingStoreBuffered
                                                              defer:YES]);
             
+            [mainWindow.get() setDelegate:objCInstance];
             auto* parentView = [mainWindow.get() contentView];
             webView->attachToParent(parentView);
             
@@ -188,6 +189,18 @@ private:
                        display:YES];
     }
 
+    NSSize windowWillResize(NSWindow* window, NSSize const& toSize)
+    {
+        if (window != mainWindow.get() || audioProcessor == nullptr)
+            return toSize;
+        
+        Rectangle<int> current([window frame].size.width, [window frame].size.height);
+        Rectangle<int> requested(toSize.width, toSize.height);
+        auto constrained = audioProcessor->webViewCheckSizeConstraint(current, requested);
+
+        return NSMakeSize(constrained.getWidth(), constrained.getHeight());
+    }
+
     //==============================================================================
     ObjCClassType* objCInstance;
     NSApplication* app;
@@ -219,6 +232,8 @@ private:
             addMethod (@selector (quit), _quit);
             JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
+            addMethod(@selector(windowWillResize:toSize:), _windowWillResize);
+
             registerClass();
         }
 
@@ -248,13 +263,16 @@ private:
         //==============================================================================
         static void _quit(id self, SEL) { _this(self)->quit(); }
         static void _openAudioSettings(id self, SEL) { _this(self)->openAudioSettings(); }
+
+        //==============================================================================
+        static NSSize _windowWillResize(id self, SEL, NSWindow* window, NSSize toSize) { return _this(self)->windowWillResize(window, toSize); }
     };
 };
 
 //==============================================================================
 int main() {
     {
-        std::unique_ptr<NSObject<NSApplicationDelegate>, NSObjectDeleter> app;
+        std::unique_ptr<NSObject<NSWindowDelegate, NSApplicationDelegate>, NSObjectDeleter> app;
 
         {
             std::unique_ptr<NSAutoreleasePool, NSObjectDeleter> pool([[NSAutoreleasePool alloc] init]);

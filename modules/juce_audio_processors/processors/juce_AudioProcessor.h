@@ -994,6 +994,12 @@ public:
     /** Use this method to resize the webview. */
     void resizeWebView(Rectangle<int> const&);
 
+    /** Invoked when the host attempts to resize the native web view.
+        You should return a valid rectangle which is allowed for your web view.
+        The default implementation always returns the requested bounds.
+    */
+    virtual Rectangle<int> webViewCheckSizeConstraint(Rectangle<int> const& current, Rectangle<int> const& requested); 
+
     //==============================================================================
     /** Returns the default number of steps for a parameter.
 

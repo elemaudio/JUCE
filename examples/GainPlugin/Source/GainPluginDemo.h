@@ -138,6 +138,20 @@ public:
         }
     }
 
+    Rectangle<int> webViewCheckSizeConstraint(Rectangle<int> const&, Rectangle<int> const& requested) override
+    {
+        static constexpr auto kAspectRatio = 2.0;
+
+        auto width  = static_cast<double>(requested.getWidth());
+        auto height = static_cast<double>(requested.getHeight());
+
+        auto adjustWidth = ((width / height) > kAspectRatio);
+        auto newWidth  = static_cast<int>(std::round(adjustWidth ? height * kAspectRatio : width));
+        auto newHeight = static_cast<int>(std::round(adjustWidth ? height : width / kAspectRatio));
+
+        return Rectangle<int>(newWidth, newHeight);
+    }
+
 private:
     //==============================================================================
     void handleAsyncUpdate () override {

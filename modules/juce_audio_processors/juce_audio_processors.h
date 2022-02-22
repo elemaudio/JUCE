@@ -46,6 +46,7 @@
   OSXFrameworks:      CoreAudio CoreMIDI AudioToolbox WebKit
   iOSFrameworks:      AudioToolbox
   mingwLibs:          windowsapp
+  linuxPackages:      gtk+-x11-3.0 webkit2gtk-4.0
 
  END_JUCE_MODULE_DECLARATION
 

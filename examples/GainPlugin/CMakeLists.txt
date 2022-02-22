@@ -13,6 +13,7 @@ juce_add_plugin(GainPlugin
     PLUGIN_MANUFACTURER_CODE Manu
     PLUGIN_CODE Yc8b
     APP_SANDBOX_ENABLED On
+    NEEDS_CURL On
     APP_SANDBOX_OPTIONS com.apple.security.network.client com.apple.security.network.server com.apple.security.device.audio-input)
     
 target_sources(GainPlugin PRIVATE Source/Main.cpp Source/GainPluginDemo.h)

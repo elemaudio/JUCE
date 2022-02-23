@@ -201,6 +201,8 @@ private:
                 <label for="bypass">Bypass</label><br/>
                 <input type="range" id="gain" value = "0" name="gain" min="0" max="100" oninput="juceBridge.postMessage('param@gain@' + (this.value / 100.))"/>
                 <label for="range">Gain</label><br/>
+                <input type="text" id="texttest"/>
+                <label for="texttest">Text Test</label><br/>
                 <button name = "button" value = "Resize" type = "button" onclick="juceBridge.postMessage('resize@' + 800 + ',' + 400)">Resize!</button>
                 </center>
                 </body>
@@ -211,7 +213,7 @@ private:
             WebViewConfiguration result;
             
             result.url = URL(htmlPageData, "text/html");
-            result.size = Rectangle<int>(0, 0, 200, 100);
+            result.size = Rectangle<int>(0, 0, 250, 125);
             
             return result;
         } ();

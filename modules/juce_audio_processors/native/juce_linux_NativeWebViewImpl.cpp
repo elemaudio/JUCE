@@ -184,6 +184,7 @@ private:
 
 std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(Rectangle<int> const& initialBounds,
                                                                  URL const& url,
+                                                                 bool /*wantsKeybaordFocus*/,
                                                                  String const& jsBootstrap,
                                                                  std::function<void (String const&)> && messageReceived) {
     return std::make_unique<LinuxWebView> (initialBounds, url, jsBootstrap, std::move(messageReceived));

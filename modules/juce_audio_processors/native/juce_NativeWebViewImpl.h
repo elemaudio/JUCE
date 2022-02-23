@@ -30,6 +30,7 @@ public:
     //==============================================================================
     static std::unique_ptr<Impl> create(Rectangle<int> const& initialBounds,
                                         URL const& url,
+                                        bool wantsKeyboardFocus,
                                         String const& jsBootstrap,
                                         std::function<void (String const&)> && messageReceived);
     virtual ~Impl() = default;

@@ -93,6 +93,7 @@ NativeWebView::NativeWebView(WebViewConfiguration const& webViewConfig,
     : config (webViewConfig),
       nativeImpl(Impl::create(webViewConfig.size,
                               webViewConfig.url,
+                              webViewConfig.wantsKeyboardFocus,
                               javascriptInjection,
                               std::move(receivedCb)))
 {}

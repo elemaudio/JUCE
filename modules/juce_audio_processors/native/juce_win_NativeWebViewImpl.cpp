@@ -37,6 +37,7 @@ public:
     //==============================================================================
     WinWebView(Rectangle<int> const& initialBounds,
                URL const& url,
+               bool /*wantsKeyboard*/,
                String const& jsBootstrap,
                std::function<void(String const&)>&& messageReceivedCallback)
         : messageReceived(std::move(messageReceivedCallback)),
@@ -207,8 +208,9 @@ private:
 //==============================================================================
 std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(Rectangle<int> const& initialBounds,
                                                                  URL const& url,
+                                                                 bool wantsKeybaordFocus,
                                                                  String const& jsBootstrap,
                                                                  std::function<void(String const&)> && messageReceived) {
-    return std::make_unique<WinWebView> (initialBounds, url, jsBootstrap, std::move(messageReceived));
+    return std::make_unique<WinWebView> (initialBounds, url, wantsKeybaordFocus, jsBootstrap, std::move(messageReceived));
 }
 }

@@ -118,9 +118,10 @@ class WebkitView
 {
 public:
     WebkitView(WKWebView* objcClassInstance,
+               bool keyboardFocus,
                std::unique_ptr<NSObject<WKScriptMessageHandler>, NSObjectDeleter> && scriptMessageHandler,
                std::function<void (String const&)> && messageReceivedCb)
-        : objcInstance(objcClassInstance),
+        : objcInstance(objcClassInstance), wantsKeyboardFocus(keyboardFocus),
           messageHandler (std::move (scriptMessageHandler)),
           messageReceived (std::move (messageReceivedCb))
     {
@@ -139,10 +140,11 @@ public:
 
     static std::unique_ptr<WKWebView, NSObjectDeleter> createInstance(Rectangle<int> const& initialBounds,
                                                                       URL const& url,
+                                                                      bool keyboardFocus,
                                                                       String const& jsBootstrap,
                                                                       std::function<void (String const&)> && messageReceivedCb)
     {
-        InitializationParams params(initialBounds, url, jsBootstrap, std::move(messageReceivedCb));
+        InitializationParams params(initialBounds, url, keyboardFocus, jsBootstrap, std::move(messageReceivedCb));
 
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wobjc-method-access")
         return std::unique_ptr<WKWebView, NSObjectDeleter> ([Class::get().createInstance() initWithInitializationParams:&params]);
@@ -194,7 +196,7 @@ private:
     //==============================================================================
     bool acceptsFirstResponder()
     {
-        return true;
+        return wantsKeyboardFocus;
     }
     
     void keyDown(NSEvent* event)
@@ -210,24 +212,33 @@ private:
             }
         }
         
-        // pass on the event
-        ObjCMsgSendSuper<WKWebView, void> (objcInstance, @selector (keyDown:), event);
+        if (wantsKeyboardFocus) {
+            // pass on the event
+            ObjCMsgSendSuper<WKWebView, void> (objcInstance, @selector (keyDown:), event);
+        } else {
+            auto* nextResponder = [objcInstance nextResponder];
+            
+            if (nextResponder != nullptr)
+                [nextResponder keyDown:event];
+        }
     }
 
     //==============================================================================
     WKWebView* objcInstance;
+    bool wantsKeyboardFocus;
     std::unique_ptr<NSObject<WKScriptMessageHandler>, NSObjectDeleter> messageHandler;
     std::function<void (String const&)> messageReceived;
     PluginHostType pluginHostType;
 
     //==============================================================================
     struct InitializationParams {
-        InitializationParams(Rectangle<int> const& bounds, URL const& u, String const& bootstrap, std::function<void (String const&)> && cb)
-            : initialBounds(bounds), url(u), jsBootstrap(bootstrap), messageReceivedCb(std::move(cb))
+        InitializationParams(Rectangle<int> const& bounds, URL const& u, bool k, String const& bootstrap, std::function<void (String const&)> && cb)
+            : initialBounds(bounds), url(u), keyboardFocus(k), jsBootstrap(bootstrap), messageReceivedCb(std::move(cb))
         {}
 
         Rectangle<int> const& initialBounds;
         URL const& url;
+        bool keyboardFocus;
         String const& jsBootstrap;
         std::function<void (String const&)> messageReceivedCb;
     };
@@ -286,7 +297,7 @@ private:
 
                 self = ObjCMsgSendSuper<WKWebView, WKWebView*, CGRect, WKWebViewConfiguration*> (self, @selector (initWithFrame:configuration:), frame, wkConfig.get());
 
-                WebkitView* juceWK = new WebkitView (self, std::move (scriptMessageHandler), std::move (params.messageReceivedCb));
+                WebkitView* juceWK = new WebkitView (self, params.keyboardFocus, std::move (scriptMessageHandler), std::move (params.messageReceivedCb));
                 setThis (self, juceWK);
 
                 juceWK->load(params.url);
@@ -321,9 +332,10 @@ class MacWebView  : public NativeWebView::Impl
 public:
     MacWebView(Rectangle<int> const& initialBounds,
                URL const& url,
+               bool wantsKeyboardFocus,
                String const& jsBootstrap,
                std::function<void (String const&)> && messageReceived)
-        : webView(WebkitView::createInstance(initialBounds, url, jsBootstrap, std::move(messageReceived)))
+        : webView(WebkitView::createInstance(initialBounds, url, wantsKeyboardFocus, jsBootstrap, std::move(messageReceived)))
     {}
 
     void setBounds(Rectangle<int> const& newBounds) override {
@@ -356,7 +368,8 @@ private:
 
 std::unique_ptr<NativeWebView::Impl> NativeWebView::Impl::create(Rectangle<int> const& initialBounds,
                                                                  URL const& url,
+                                                                 bool wantsKeyboardFocus,
                                                                  String const& jsBootstrap,
                                                                  std::function<void (String const&)> && messageReceived) {
-    return std::make_unique<MacWebView>(initialBounds, url, jsBootstrap, std::move(messageReceived));
+    return std::make_unique<MacWebView>(initialBounds, url, wantsKeyboardFocus, jsBootstrap, std::move(messageReceived));
 }

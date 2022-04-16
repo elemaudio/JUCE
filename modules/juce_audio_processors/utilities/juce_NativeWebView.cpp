@@ -30,9 +30,33 @@ constexpr char javascriptInjection[] =
 R"END(
 var juceBridge = {
     postMessage: function (param) {
-        juceBridgeInternalMessage(param);
+        juceBridgeInternalMessage("msg:" + param);
     }
 };
+
+var console=(function(oldCons){
+    return {
+        log: function(text){
+            oldCons.log(text);
+            juceBridgeInternalMessage("log:log+" + text);
+        },
+        info: function (text) {
+            oldCons.info(text);
+            juceBridgeInternalMessage("log:info+" + text);
+        },
+        warn: function (text) {
+            oldCons.warn(text);
+            juceBridgeInternalMessage("log:warn+" + text);
+        },
+        error: function (text) {
+            oldCons.error(text);
+            juceBridgeInternalMessage("log:error+" + text);
+        }
+    };
+}(window.console));
+
+//Then redefine the old console
+window.console = console;
 )END";
 
 //==============================================================================
@@ -91,11 +115,12 @@ namespace juce
 NativeWebView::NativeWebView(WebViewConfiguration const& webViewConfig,
                              std::function<void (String const&)> && receivedCb)
     : config (webViewConfig),
+      receiveMessageCallback (std::move(receivedCb)),
       nativeImpl(Impl::create(webViewConfig.size,
                               webViewConfig.url,
                               webViewConfig.wantsKeyboardFocus,
                               javascriptInjection,
-                              std::move(receivedCb)))
+                              [this](String const& m) { internalMessageReceived(m); }))
 {}
 
 NativeWebView::~NativeWebView() = default;
@@ -145,6 +170,21 @@ void* NativeWebView::getNativeView()
     return nativeImpl->getNativeView();
 }
 #endif
+
+void NativeWebView::internalMessageReceived(String const& message) {
+    auto cmd = message.substring(0, message.indexOf(":"));
+    auto payload = message.substring(message.indexOf(":") + 1);
+
+    if (cmd == "msg") receiveMessageCallback(payload);
+    else if (cmd == "log") {
+        auto logtype = payload.substring(0, payload.indexOf("+"));
+        auto logmsg = payload.substring(payload.indexOf("+") + 1);
+
+        // ignoring logtype for now
+        (void)logtype;
+        DBG(logmsg);
+    }
+}
 
 //==============================================================================
 void NativeWebView::Impl::executeJS(String const& functionName, String const& param)

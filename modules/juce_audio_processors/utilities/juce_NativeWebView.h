@@ -53,8 +53,11 @@ private:
     //==============================================================================
     friend class Impl;
 
+    void internalMessageReceived(String const&);
+
     //==============================================================================
     WebViewConfiguration config;
+    std::function<void(String const&)> receiveMessageCallback;
     std::unique_ptr<Impl> nativeImpl;
     bool attached = false;
 

@@ -82,36 +82,6 @@ void initialiseMacVST()
    #endif
 }
 
-JUCE_API void attachNSViewToParent (void* parentView, void* childView);
-void attachNSViewToParent(void* parentView, void* childView)
-{
-    [static_cast<NSView*>(parentView) addSubview:static_cast<NSView*>(childView)];
-}
-
-JUCE_API void detachNSViewFromParent (void* view);
-void detachNSViewFromParent(void* view)
-{
-    [static_cast<NSView*>(view) removeFromSuperview];
-}
-
-JUCE_API void setNSViewFrameSize (void* view, juce::Rectangle<int>& bounds);
-void setNSViewFrameSize(void* view, juce::Rectangle<int>& bounds)
-{
-    [static_cast<NSView*>(view) setFrameSize:CGSizeMake(bounds.getWidth(), bounds.getHeight())];
-}
-
-JUCE_API juce::Rectangle<int> getNSViewFrameSize (void* view);
-juce::Rectangle<int> getNSViewFrameSize(void* view)
-{
-    auto bounds = [static_cast<NSView*>(view) frame];
-
-    return juce::Rectangle<int>(
-        static_cast<int>(bounds.origin.x),
-        static_cast<int>(bounds.origin.y),
-        static_cast<int>(bounds.size.width),
-        static_cast<int>(bounds.size.height));
-}
-
 JUCE_API void* attachComponentToWindowRefVST (Component* comp, void* parentWindowOrView, bool isNSView);
 void* attachComponentToWindowRefVST (Component* comp, void* parentWindowOrView, bool isNSView)
 {

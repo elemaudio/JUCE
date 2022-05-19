@@ -102,10 +102,10 @@ using namespace Steinberg;
  extern JUCE_API void* attachComponentToWindowRefVST (Component*, void* parentWindowOrView, bool isNSView);
  extern JUCE_API void detachComponentFromWindowRefVST (Component*, void* nsWindow, bool isNSView);
 
- extern JUCE_API void attachNSViewToParent (void* parentView, void* childView);
- extern JUCE_API void detachNSViewFromParent (void* view);
- extern JUCE_API void setNSViewFrameSize (void* view, juce::Rectangle<int>& bounds);
- extern JUCE_API juce::Rectangle<int> getNSViewFrameSize (void* view);
+ extern void attachNSViewToParent(void* parentView, void* childView);
+ extern void detachNSViewFromParent(void* view);
+ extern void setNSViewFrameSize(void* view, std::tuple<int, int, int, int>& bounds);
+ extern std::tuple<int, int, int, int> getNSViewFrameSize(void* view);
 #endif
 
 #if JUCE_WINDOWS && JUCE_WIN_PER_MONITOR_DPI_AWARE
@@ -1621,7 +1621,7 @@ private:
             : EditorView (&ec, &initialBounds),
               webViewNativeHandle(webViewHandle)
         {
-            Rectangle<int> bounds(0, 0, initialBounds.getWidth(), initialBounds.getHeight());
+            auto bounds = std::make_tuple(0, 0, initialBounds.getWidth(), initialBounds.getHeight());
             setNSViewFrameSize(webViewNativeHandle, bounds);
         }
 
@@ -1666,7 +1666,7 @@ private:
         tresult PLUGIN_API onSize (ViewRect* rc) override
         {
             if (rc != nullptr) {
-                Rectangle<int> bounds(0, 0, rc->getWidth(), rc->getHeight());
+                auto bounds = std::make_tuple(0, 0, rc->getWidth(), rc->getHeight());
                 setNSViewFrameSize(webViewNativeHandle, bounds);
 
                 return kResultTrue;
@@ -1678,9 +1678,9 @@ private:
         {
             if (size != nullptr)
             {
-                auto bounds = getNSViewFrameSize(webViewNativeHandle);
+                auto [x, y, width, height] = getNSViewFrameSize(webViewNativeHandle);
 
-                *size = ViewRect(bounds.getX(), bounds.getY(), bounds.getRight(), bounds.getBottom());
+                *size = ViewRect(x, y, x + width, y + height);
 
                 return kResultTrue;
             }

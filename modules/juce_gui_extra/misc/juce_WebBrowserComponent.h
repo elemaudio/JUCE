@@ -136,6 +136,10 @@ public:
     virtual void scriptMessageReceived (const String& message);
 
     //==============================================================================
+    /** A quick method for retreiving the underlying native view handle. */
+    void* getNativeViewHandle();
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics&) override;
     /** @internal */

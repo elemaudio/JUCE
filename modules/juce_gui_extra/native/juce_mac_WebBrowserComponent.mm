@@ -733,6 +733,12 @@ void WebBrowserComponent::setOnMessageReceivedCallback(std::function<void(const 
     onScriptMessageReceivedCallback = std::move(callback);
 }
 
+void* WebBrowserComponent::getNativeViewHandle()
+{
+    // Leaning on the NSViewComponent API here, which the browser inherits
+    return browser->getView();
+}
+
 void WebBrowserComponent::scriptMessageReceived (const String& message) {
     if (onScriptMessageReceivedCallback) {
         onScriptMessageReceivedCallback(message);

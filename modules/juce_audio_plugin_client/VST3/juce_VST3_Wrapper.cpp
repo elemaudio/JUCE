@@ -101,6 +101,11 @@ using namespace Steinberg;
 
  extern JUCE_API void* attachComponentToWindowRefVST (Component*, void* parentWindowOrView, bool isNSView);
  extern JUCE_API void detachComponentFromWindowRefVST (Component*, void* nsWindow, bool isNSView);
+
+ extern JUCE_API void attachNSViewToParent (void* parentView, void* childView);
+ extern JUCE_API void detachNSViewFromParent (void* view);
+ extern JUCE_API void setNSViewFrameSize (void* view, juce::Rectangle<int>& bounds);
+ extern JUCE_API juce::Rectangle<int> getNSViewFrameSize (void* view);
 #endif
 
 #if JUCE_WINDOWS && JUCE_WIN_PER_MONITOR_DPI_AWARE
@@ -1164,8 +1169,14 @@ public:
                                           || getHostType().isAdobeAudition()
                                           || getHostType().isPremiere());
 
-            if (mayCreateEditor)
+            if (mayCreateEditor) {
+                if (pluginInstance->hasWebViewEditor()) {
+                    ViewRect rc(0, 0, 600, 600);
+                    return new WebViewEditor (*this, *audioProcessor, pluginInstance->getWebViewNativeHandle(), rc);
+                }
+
                 return new JuceVST3Editor (*this, *audioProcessor);
+            }
         }
 
         return nullptr;
@@ -1600,6 +1611,106 @@ private:
         AudioProcessorEditor& editor;
         Steinberg::Vst::IComponentHandler* componentHandler = nullptr;
         Steinberg::IPlugView* view = nullptr;
+    };
+
+    //==============================================================================
+    class WebViewEditor  : public Vst::EditorView
+    {
+    public:
+        WebViewEditor (JuceVST3EditController& ec, JuceAudioProcessor& p, void* webViewHandle, ViewRect& initialBounds)
+            : EditorView (&ec, &initialBounds),
+              webViewNativeHandle(webViewHandle)
+        {
+            Rectangle<int> bounds(0, 0, initialBounds.getWidth(), initialBounds.getHeight());
+            setNSViewFrameSize(webViewNativeHandle, bounds);
+        }
+
+        REFCOUNT_METHODS (Vst::EditorView)
+
+        //==============================================================================
+        tresult PLUGIN_API isPlatformTypeSupported (FIDString type) override
+        {
+            if (type != nullptr)
+            {
+#if JUCE_MAC
+                if (strcmp (type, kPlatformTypeNSView) == 0) {
+                    return kResultTrue;
+                }
+#endif
+            }
+
+            return kResultFalse;
+        }
+
+        tresult PLUGIN_API attached (void* parent, FIDString type) override
+        {
+            if (parent == nullptr || isPlatformTypeSupported (type) == kResultFalse)
+                return kResultFalse;
+
+            if (!std::exchange(isAttached, true)) {
+                attachNSViewToParent(parent, webViewNativeHandle);
+            }
+
+            return kResultTrue;
+        }
+
+        tresult PLUGIN_API removed() override
+        {
+            if (std::exchange(isAttached, false)) {
+                detachNSViewFromParent(webViewNativeHandle);
+            }
+
+            return CPluginView::removed();
+        }
+
+        tresult PLUGIN_API onSize (ViewRect* rc) override
+        {
+            if (rc != nullptr) {
+                Rectangle<int> bounds(0, 0, rc->getWidth(), rc->getHeight());
+                setNSViewFrameSize(webViewNativeHandle, bounds);
+
+                return kResultTrue;
+            }
+            return kResultFalse;
+        }
+
+        tresult PLUGIN_API getSize (ViewRect* size) override
+        {
+            if (size != nullptr)
+            {
+                auto bounds = getNSViewFrameSize(webViewNativeHandle);
+
+                *size = ViewRect(bounds.getX(), bounds.getY(), bounds.getRight(), bounds.getBottom());
+
+                return kResultTrue;
+            }
+
+
+            return kResultFalse;
+        }
+
+        tresult PLUGIN_API canResize() override
+        {
+            return kResultTrue;
+        }
+
+        tresult PLUGIN_API checkSizeConstraint (ViewRect* rectToCheck) override
+        {
+            if (rectToCheck == nullptr)
+                return kResultFalse;
+
+            *rectToCheck = ViewRect(0, 0, 600, 600);
+
+            return kResultTrue;
+        }
+
+    private:
+        //==============================================================================
+        void* webViewNativeHandle;
+        bool isAttached = false;
+
+        //==============================================================================
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebViewEditor)
     };
 
     //==============================================================================

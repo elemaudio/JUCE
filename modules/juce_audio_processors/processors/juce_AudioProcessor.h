@@ -965,6 +965,11 @@ public:
     virtual bool hasEditor() const = 0;
 
     //==============================================================================
+    /** Specializations of the above methods for WebView editors. */
+    virtual bool hasWebViewEditor() const = 0;
+    virtual void* getWebViewNativeHandle() = 0;
+
+    //==============================================================================
     /** Returns the active editor, if there is one. Bear in mind this can return nullptr
         even if an editor has previously been opened.
 

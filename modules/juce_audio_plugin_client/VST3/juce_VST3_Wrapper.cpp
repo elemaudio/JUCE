@@ -1171,7 +1171,8 @@ public:
 
             if (mayCreateEditor) {
                 if (pluginInstance->hasWebViewEditor()) {
-                    ViewRect rc(0, 0, 600, 600);
+                    auto defaultSize = pluginInstance->getWebViewDefaultSize();
+                    ViewRect rc(0, 0, defaultSize.getWidth(), defaultSize.getHeight());
                     return new WebViewEditor (*this, *audioProcessor, pluginInstance->getWebViewNativeHandle(), rc);
                 }
 
@@ -1621,7 +1622,15 @@ private:
             : EditorView (&ec, &initialBounds),
               webViewNativeHandle(webViewHandle)
         {
-            auto bounds = std::make_tuple(0, 0, initialBounds.getWidth(), initialBounds.getHeight());
+            auto const w = initialBounds.getWidth();
+            auto const h = initialBounds.getHeight();
+
+            auto bounds = std::make_tuple(0, 0, w, h);
+
+            sizeConstrainer.setMinimumSize(w / 2, h / 2);
+            sizeConstrainer.setMaximumSize(w * 2, h * 2);
+            sizeConstrainer.setFixedAspectRatio((double) w / (double) h);
+
             setNSViewFrameSize(webViewNativeHandle, bounds);
         }
 
@@ -1699,7 +1708,13 @@ private:
             if (rectToCheck == nullptr)
                 return kResultFalse;
 
-            *rectToCheck = ViewRect(0, 0, 600, 600);
+            auto minWidth = sizeConstrainer.getMinimumWidth();
+            auto maxWidth = sizeConstrainer.getMaximumWidth();
+
+            auto w = jmax(minWidth, jmin(maxWidth, rectToCheck->getWidth()));
+            auto h = static_cast<int>((double) w / sizeConstrainer.getFixedAspectRatio());
+
+            *rectToCheck = ViewRect(0, 0, w, h);
 
             return kResultTrue;
         }
@@ -1708,6 +1723,8 @@ private:
         //==============================================================================
         void* webViewNativeHandle;
         bool isAttached = false;
+
+        ComponentBoundsConstrainer sizeConstrainer;
 
         //==============================================================================
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebViewEditor)

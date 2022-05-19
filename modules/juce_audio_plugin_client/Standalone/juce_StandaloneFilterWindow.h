@@ -709,8 +709,6 @@ public:
         : DocumentWindow (title, backgroundColour, DocumentWindow::minimiseButton | DocumentWindow::closeButton),
           optionsButton ("Options")
     {
-        setConstrainer (&decoratorConstrainer);
-
        #if JUCE_IOS || JUCE_ANDROID
         setTitleBarHeight (0);
        #else
@@ -724,6 +722,26 @@ public:
         pluginHolder.reset (new StandalonePluginHolder (settingsToUse, takeOwnershipOfSettings,
                                                         preferredDefaultDeviceName, preferredSetupOptions,
                                                         constrainToConfiguration, autoOpenMidiDevices));
+
+        if (auto* processor = getAudioProcessor())
+        {
+            if (processor->hasWebViewEditor())
+            {
+                auto defaultSize = processor->getWebViewDefaultSize();
+                auto* constrainer = getConstrainer();
+
+                auto const w = defaultSize.getWidth();
+                auto const h = defaultSize.getHeight();
+
+                constrainer->setMinimumSize(w / 2, h / 2);
+                constrainer->setMaximumSize(w * 2, h * 2);
+                constrainer->setFixedAspectRatio((double) w / (double) h);
+            }
+            else
+            {
+                setConstrainer (&decoratorConstrainer);
+            }
+        }
 
        #if JUCE_IOS || JUCE_ANDROID
         setFullScreen (true);
@@ -765,8 +783,17 @@ public:
         setBoundsConstrained (windowScreenBounds);
 
         if (auto* processor = getAudioProcessor())
-            if (auto* editor = processor->getActiveEditor())
-                setResizable (editor->isResizable(), false);
+        {
+            if (processor->hasWebViewEditor())
+            {
+                setResizable(true, false);
+            }
+            else
+            {
+                if (auto* editor = processor->getActiveEditor())
+                    setResizable (editor->isResizable(), false);
+            }
+        }
        #endif
     }
 
@@ -843,6 +870,19 @@ public:
 private:
     void updateContent()
     {
+        if (auto* proc = getAudioProcessor())
+        {
+            if (proc->hasWebViewEditor())
+            {
+                auto* content = proc->getWebViewComponent();
+
+                content->setSize(600, 600);
+                setContentNonOwned(content, true);
+
+                return;
+            }
+        }
+
         auto* content = new MainContentComponent (*this);
         decoratorConstrainer.setMainContentComponent (content);
 

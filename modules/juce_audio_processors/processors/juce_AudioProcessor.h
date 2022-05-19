@@ -967,7 +967,9 @@ public:
     //==============================================================================
     /** Specializations of the above methods for WebView editors. */
     virtual bool hasWebViewEditor() const = 0;
+    virtual Rectangle<int> getWebViewDefaultSize() = 0;
     virtual void* getWebViewNativeHandle() = 0;
+    virtual Component* getWebViewComponent() = 0;
 
     //==============================================================================
     /** Returns the active editor, if there is one. Bear in mind this can return nullptr

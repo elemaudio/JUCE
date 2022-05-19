@@ -87,6 +87,12 @@ public:
     /** Refreshes the browser. */
     void refresh();
 
+    /** Posts a message to the JavaScript environment by evaluating the provided message in the global context. */
+    void evaluate(const String& message, std::function<void(const var&)>&& callback);
+
+    /** Sets a message callback to be invoked when the webview receives a message from the JavaScript environment. */
+    void setOnMessageReceivedCallback(std::function<void(const String&)> && callback);
+
     /** Clear cookies that the OS has stored for the WebComponents of this application */
     static void clearCookies();
 
@@ -126,6 +132,9 @@ public:
      */
     virtual void newWindowAttemptingToLoad (const String& newURL)   { ignoreUnused (newURL); }
 
+    /** This callback is called when a script message fires, but you should just set the callback above. */
+    virtual void scriptMessageReceived (const String& message);
+
     //==============================================================================
     /** @internal */
     void paint (Graphics&) override;
@@ -159,6 +168,8 @@ private:
     String lastURL;
     StringArray lastHeaders;
     MemoryBlock lastPostData;
+
+    std::function<void(const String&)> onScriptMessageReceivedCallback;
 
     void reloadLastURL();
     void checkWindowAssociation();

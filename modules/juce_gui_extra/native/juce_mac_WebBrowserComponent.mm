@@ -274,6 +274,7 @@ struct WebViewDelegateClass  : public ObjCClass<NSObject>
         addMethod (@selector (webView:didFailNavigation:withError:),                      didFailNavigation);
         addMethod (@selector (webView:didFailProvisionalNavigation:withError:),           didFailProvisionalNavigation);
         addMethod (@selector (webViewDidClose:),                                          webViewDidClose);
+        addMethod (@selector (userContentController:didReceiveScriptMessage:),            didReceiveScriptMessage);
         addMethod (@selector (webView:createWebViewWithConfiguration:forNavigationAction:
                               windowFeatures:),                                           createWebView);
 
@@ -329,6 +330,12 @@ private:
     static void webViewDidClose (id self, SEL, WKWebView*)
     {
         getOwner (self)->windowCloseRequest();
+    }
+
+    static void didReceiveScriptMessage (id self, SEL, WKUserContentController*, WKScriptMessage* msg)
+    {
+        auto s = nsStringToJuce([msg body]);
+        getOwner (self)->scriptMessageReceived(s);
     }
 
     static WKWebView* createWebView (id self, SEL, WKWebView*, WKWebViewConfiguration*,
@@ -416,6 +423,7 @@ struct WebViewBase
     virtual void goForward() = 0;
     virtual void stop() = 0;
     virtual void refresh() = 0;
+    virtual void evaluate(const String&, std::function<void(const var&)>&&) = 0;
 
     virtual id getWebView() = 0;
 };
@@ -488,6 +496,8 @@ public:
     void stop() override        { [webView.get() stopLoading: nil]; }
     void refresh() override     { [webView.get() reload: nil]; }
 
+    void evaluate(const String& message, std::function<void(const var&)>&& callback) override    {}
+
     id getWebView() override    { return webView.get(); }
 
     void mouseMove (const MouseEvent&)
@@ -524,14 +534,37 @@ public:
          webViewDelegate.reset ([cls.createInstance() init]);
          WebViewDelegateClass::setOwner (webViewDelegate.get(), owner);
 
+         const auto* kInitScript = R"script(
+(function() {
+try{
+  window.juceBridge = {
+    postMessage: function(msg) {
+      return window.webkit.messageHandlers.nativeHandler.postMessage(msg);
+    },
+  };
+  }catch(e) { return JSON.stringify(e); }
+
+  return true;
+})();
+)script";
+
+         std::unique_ptr<WKUserScript, NSObjectDeleter> userScript([[WKUserScript alloc] initWithSource:juceStringToNS(String(kInitScript))
+                 injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                 forMainFrameOnly:NO]);
+
          [webView.get() setNavigationDelegate: webViewDelegate.get()];
          [webView.get() setUIDelegate:         webViewDelegate.get()];
+         [webView.get().configuration.userContentController
+            addUserScript:userScript.get()];
+         [webView.get().configuration.userContentController
+            addScriptMessageHandler:webViewDelegate.get() name:@"nativeHandler"];
     }
 
     ~WKWebViewImpl() override
     {
         [webView.get() setNavigationDelegate: nil];
         [webView.get() setUIDelegate:         nil];
+        [webView.get().configuration.userContentController removeScriptMessageHandlerForName: @"nativeHandler"];
     }
 
     void goToURL (const String& url,
@@ -568,6 +601,16 @@ public:
 
     void stop() override        { [webView.get() stopLoading]; }
     void refresh() override     { [webView.get() reload]; }
+
+    void evaluate (const String& message, std::function<void(const var&)>&& callback) override {
+        [webView.get() evaluateJavaScript: juceStringToNS (message) completionHandler: [callback = std::move(callback)](id result, NSError* error) {
+            if (error == nil) {
+                callback(nsObjectToVar(result));
+            } else {
+                callback(nsStringToJuce([error localizedDescription]));
+            }
+        }];
+    }
 
     id getWebView() override    { return webView.get(); }
 
@@ -615,6 +658,10 @@ public:
 
     void stop()        { webView->stop(); }
     void refresh()     { webView->refresh(); }
+
+    void evaluate (const String& message, std::function<void(const var&)>&& callback) {
+        webView->evaluate(message, std::move(callback));
+    }
 
 private:
     std::unique_ptr<WebViewBase> webView;
@@ -674,6 +721,22 @@ void WebBrowserComponent::goForward()
 void WebBrowserComponent::refresh()
 {
     browser->refresh();
+}
+
+void WebBrowserComponent::evaluate(const String& message, std::function<void(const var&)>&& callback)
+{
+    browser->evaluate(message, std::move(callback));
+}
+
+void WebBrowserComponent::setOnMessageReceivedCallback(std::function<void(const String&)>&& callback)
+{
+    onScriptMessageReceivedCallback = std::move(callback);
+}
+
+void WebBrowserComponent::scriptMessageReceived (const String& message) {
+    if (onScriptMessageReceivedCallback) {
+        onScriptMessageReceivedCallback(message);
+    }
 }
 
 //==============================================================================

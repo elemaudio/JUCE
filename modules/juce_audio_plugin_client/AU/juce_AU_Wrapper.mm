@@ -1725,8 +1725,23 @@ public:
                                       kAudioUnitScope_Global, 0, pointers, &propertySize) == noErr)
             {
                 if (AudioProcessor* filter = static_cast<AudioProcessor*> (pointers[0]))
+                {
+                    if (filter->hasWebViewEditor())
+                    {
+                        auto* nativeHandle = static_cast<NSView*>(filter->getWebViewNativeHandle());
+                        auto defaultSize = filter->getWebViewDefaultSize();
+
+                        [nativeHandle setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
+                        [nativeHandle setFrameSize:CGSizeMake(defaultSize.getWidth(), defaultSize.getHeight())];
+
+                        return nativeHandle;
+                    }
+
                     if (AudioProcessorEditor* editorComp = filter->createEditorIfNeeded())
+                    {
                         return EditorCompHolder::createViewFor (filter, static_cast<JuceAU*> (pointers[1]), editorComp);
+                    }
+                }
             }
 
             return nil;

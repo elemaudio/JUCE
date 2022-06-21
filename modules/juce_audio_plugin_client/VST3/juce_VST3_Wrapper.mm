@@ -59,6 +59,34 @@ std::tuple<int, int, int, int> getNSViewFrameSize(void* view)
         static_cast<int>(bounds.size.height));
 }
 
+const char* getManufacturerCodeForPluginBundle(const char* pluginBundlePath)
+{
+    NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
+    NSString* s = [[NSBundle bundleWithPath:bundlePath] objectForInfoDictionaryKey:@"ElemManuCode"];
+    return [s UTF8String];
+}
+
+const char* getPluginCodeForPluginBundle(const char* pluginBundlePath)
+{
+    NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
+    NSString* s = [[NSBundle bundleWithPath:bundlePath] objectForInfoDictionaryKey:@"ElemPluginCode"];
+    return [s UTF8String];
+}
+
+const char* getVersionForPluginBundle(const char* pluginBundlePath)
+{
+    NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
+    NSString* s = [[NSBundle bundleWithPath:bundlePath] objectForInfoDictionaryKey:@"CFBundleVersion"];
+    return [s UTF8String];
+}
+
+const char* getNameForPluginBundle(const char* pluginBundlePath)
+{
+    NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
+    NSString* s = [[NSBundle bundleWithPath:bundlePath] objectForInfoDictionaryKey:@"CFBundleName"];
+    return [s UTF8String];
+}
+
 } // namespace juce
 
 #endif

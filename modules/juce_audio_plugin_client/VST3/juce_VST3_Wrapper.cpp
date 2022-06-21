@@ -102,10 +102,88 @@ using namespace Steinberg;
  extern JUCE_API void* attachComponentToWindowRefVST (Component*, void* parentWindowOrView, bool isNSView);
  extern JUCE_API void detachComponentFromWindowRefVST (Component*, void* nsWindow, bool isNSView);
 
+ // Forked API for MacOS specifics in the VST3 wrapper
  extern void attachNSViewToParent(void* parentView, void* childView);
  extern void detachNSViewFromParent(void* view);
  extern void setNSViewFrameSize(void* view, std::tuple<int, int, int, int>& bounds);
  extern std::tuple<int, int, int, int> getNSViewFrameSize(void* view);
+
+ extern const char* getManufacturerCodeForPluginBundle(const char* pluginBundlePath);
+ extern const char* getPluginCodeForPluginBundle(const char* pluginBundlePath);
+ extern const char* getVersionForPluginBundle(const char* pluginBundlePath);
+ extern const char* getNameForPluginBundle(const char* pluginBundlePath);
+
+ // Wrapper functions for the above API
+ const uint32_t getManufacturerCodeForCurrentPlugin()
+ {
+     auto const pluginBundle = File::getSpecialLocation(File::SpecialLocationType::currentApplicationFile);
+     auto const pluginBundlePath = pluginBundle.getFullPathName();
+     auto const codeChars = getManufacturerCodeForPluginBundle(pluginBundlePath.toRawUTF8());
+
+     // Safety first
+     if (codeChars == nullptr || std::char_traits<char>::length(codeChars) < 4) {
+         return 0;
+     }
+
+     // Reinterpreting the plugin code as a hex number
+     std::stringstream ss;
+     ss << std::hex << std::setfill('0');
+
+     for (int i = 0; i < 4; ++i)
+     {
+         ss << std::setw(2) << static_cast<unsigned>(codeChars[i]);
+     }
+
+     // Padding, because we don't know how big the hex value actually is.
+     ss << "00000000";
+
+     // But then we only take 8 chars, and interpret it as an unsigned long
+     return static_cast<uint32_t>(std::stoll(ss.str().substr(0, 8), 0, 16));
+ }
+
+ const uint32_t getPluginCodeForCurrentPlugin()
+ {
+     auto const pluginBundle = File::getSpecialLocation(File::SpecialLocationType::currentApplicationFile);
+     auto const pluginBundlePath = pluginBundle.getFullPathName();
+     auto const codeChars = getPluginCodeForPluginBundle(pluginBundlePath.toRawUTF8());
+
+     // Safety first
+     if (codeChars == nullptr || std::char_traits<char>::length(codeChars) < 4) {
+         return 0;
+     }
+
+     // Reinterpreting the plugin code as a hex number
+     std::stringstream ss;
+     ss << std::hex << std::setfill('0');
+
+     for (int i = 0; i < 4; ++i)
+     {
+         ss << std::setw(2) << static_cast<unsigned>(codeChars[i]);
+     }
+
+     // Padding, because we don't know how big the hex value actually is.
+     ss << "00000000";
+
+     // But then we only take 8 chars, and interpret it as an unsigned long
+     return static_cast<uint32_t>(std::stoll(ss.str().substr(0, 8), 0, 16));
+ }
+
+ const char* getVersionForCurrentPlugin()
+ {
+     auto const pluginBundle = File::getSpecialLocation(File::SpecialLocationType::currentApplicationFile);
+     auto const pluginBundlePath = pluginBundle.getFullPathName();
+
+     return getVersionForPluginBundle(pluginBundlePath.toRawUTF8());
+ }
+
+ const char* getNameForCurrentPlugin()
+ {
+     auto const pluginBundle = File::getSpecialLocation(File::SpecialLocationType::currentApplicationFile);
+     auto const pluginBundlePath = pluginBundle.getFullPathName();
+
+     return getNameForPluginBundle(pluginBundlePath.toRawUTF8());
+ }
+
 #endif
 
 #if JUCE_WINDOWS && JUCE_WIN_PER_MONITOR_DPI_AWARE
@@ -3680,7 +3758,7 @@ const char* JuceVST3Component::kJucePrivateDataIdentifier = "JUCEPrivateData";
 JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4310)
 JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wall")
 
-DECLARE_CLASS_IID (JuceAudioProcessor, 0x0101ABAB, 0xABCDEF01, JucePlugin_ManufacturerCode, JucePlugin_PluginCode)
+DECLARE_CLASS_IID (JuceAudioProcessor, 0x0101ABAB, 0xABCDEF01, getManufacturerCodeForCurrentPlugin(), getPluginCodeForCurrentPlugin())
 DEF_CLASS_IID (JuceAudioProcessor)
 
 #if JUCE_VST3_CAN_REPLACE_VST2
@@ -3696,10 +3774,10 @@ DEF_CLASS_IID (JuceAudioProcessor)
  const Steinberg::FUID JuceVST3Component     ::iid (getFUIDForVST2ID (false));
  const Steinberg::FUID JuceVST3EditController::iid (getFUIDForVST2ID (true));
 #else
- DECLARE_CLASS_IID (JuceVST3EditController, 0xABCDEF01, 0x1234ABCD, JucePlugin_ManufacturerCode, JucePlugin_PluginCode)
+ DECLARE_CLASS_IID (JuceVST3EditController, 0xABCDEF01, 0x1234ABCD, getManufacturerCodeForCurrentPlugin(), getPluginCodeForCurrentPlugin())
  DEF_CLASS_IID (JuceVST3EditController)
 
- DECLARE_CLASS_IID (JuceVST3Component, 0xABCDEF01, 0x9182FAEB, JucePlugin_ManufacturerCode, JucePlugin_PluginCode)
+ DECLARE_CLASS_IID (JuceVST3Component, 0xABCDEF01, 0x9182FAEB, getManufacturerCodeForCurrentPlugin(), getPluginCodeForCurrentPlugin())
  DEF_CLASS_IID (JuceVST3Component)
 #endif
 
@@ -4079,11 +4157,11 @@ extern "C" SMTG_EXPORT_SYMBOL IPluginFactory* PLUGIN_API GetPluginFactory()
         static const PClassInfo2 componentClass (JuceVST3Component::iid,
                                                  PClassInfo::kManyInstances,
                                                  kVstAudioEffectClass,
-                                                 JucePlugin_Name,
+                                                 getNameForCurrentPlugin(),
                                                  JucePlugin_Vst3ComponentFlags,
                                                  JucePlugin_Vst3Category,
                                                  JucePlugin_Manufacturer,
-                                                 JucePlugin_VersionString,
+                                                 getVersionForCurrentPlugin(),
                                                  kVstVersionString);
 
         globalFactory->registerClass (componentClass, createComponentInstance);
@@ -4091,11 +4169,11 @@ extern "C" SMTG_EXPORT_SYMBOL IPluginFactory* PLUGIN_API GetPluginFactory()
         static const PClassInfo2 controllerClass (JuceVST3EditController::iid,
                                                   PClassInfo::kManyInstances,
                                                   kVstComponentControllerClass,
-                                                  JucePlugin_Name,
+                                                  getNameForCurrentPlugin(),
                                                   JucePlugin_Vst3ComponentFlags,
                                                   JucePlugin_Vst3Category,
                                                   JucePlugin_Manufacturer,
-                                                  JucePlugin_VersionString,
+                                                  getVersionForCurrentPlugin(),
                                                   kVstVersionString);
 
         globalFactory->registerClass (controllerClass, createControllerInstance);

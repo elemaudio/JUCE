@@ -88,6 +88,110 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #include <juce_audio_processors/format_types/juce_AU_Shared.h>
 
 //==============================================================================
+// Forked stuff
+const char* getManufacturerCodeForPluginBundle(const char* pluginBundlePath)
+{
+    NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
+    NSString* s = [[NSBundle bundleWithPath:bundlePath] objectForInfoDictionaryKey:@"ElemManuCode"];
+    return [s UTF8String];
+}
+
+const char* getPluginCodeForPluginBundle(const char* pluginBundlePath)
+{
+    NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
+    NSString* s = [[NSBundle bundleWithPath:bundlePath] objectForInfoDictionaryKey:@"ElemPluginCode"];
+    return [s UTF8String];
+}
+
+const char* getVersionForPluginBundle(const char* pluginBundlePath)
+{
+    NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
+    NSString* s = [[NSBundle bundleWithPath:bundlePath] objectForInfoDictionaryKey:@"CFBundleVersion"];
+    return [s UTF8String];
+}
+
+const char* getNameForPluginBundle(const char* pluginBundlePath)
+{
+    NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
+    NSString* s = [[NSBundle bundleWithPath:bundlePath] objectForInfoDictionaryKey:@"CFBundleName"];
+    return [s UTF8String];
+}
+
+const uint32_t getManufacturerCodeForCurrentPlugin()
+{
+    auto const pluginBundle = juce::File::getSpecialLocation(juce::File::SpecialLocationType::currentApplicationFile);
+    auto const pluginBundlePath = pluginBundle.getFullPathName();
+    auto const codeChars = getManufacturerCodeForPluginBundle(pluginBundlePath.toRawUTF8());
+
+    // Safety first
+    if (codeChars == nullptr || std::char_traits<char>::length(codeChars) < 4) {
+        return 0;
+    }
+
+    // Reinterpreting the plugin code as a hex number
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+
+    for (int i = 0; i < 4; ++i)
+    {
+        ss << std::setw(2) << static_cast<unsigned>(codeChars[i]);
+    }
+
+    // Padding, because we don't know how big the hex value actually is.
+    ss << "00000000";
+
+    // But then we only take 8 chars, and interpret it as an unsigned long
+    return static_cast<uint32_t>(std::stoll(ss.str().substr(0, 8), 0, 16));
+}
+
+const uint32_t getPluginCodeForCurrentPlugin()
+{
+    auto const pluginBundle = juce::File::getSpecialLocation(juce::File::SpecialLocationType::currentApplicationFile);
+    auto const pluginBundlePath = pluginBundle.getFullPathName();
+    auto const codeChars = getPluginCodeForPluginBundle(pluginBundlePath.toRawUTF8());
+
+    // Safety first
+    if (codeChars == nullptr || std::char_traits<char>::length(codeChars) < 4) {
+        return 0;
+    }
+
+    // Reinterpreting the plugin code as a hex number
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+
+    for (int i = 0; i < 4; ++i)
+    {
+        ss << std::setw(2) << static_cast<unsigned>(codeChars[i]);
+    }
+
+    // Padding, because we don't know how big the hex value actually is.
+    ss << "00000000";
+
+    // But then we only take 8 chars, and interpret it as an unsigned long
+    return static_cast<uint32_t>(std::stoll(ss.str().substr(0, 8), 0, 16));
+}
+
+const uint32_t getVersionForCurrentPlugin()
+{
+    auto const pluginBundle = juce::File::getSpecialLocation(juce::File::SpecialLocationType::currentApplicationFile);
+    auto const pluginBundlePath = pluginBundle.getFullPathName();
+    auto const version = juce::String(juce::CharPointer_UTF8(getVersionForPluginBundle(pluginBundlePath.toRawUTF8())));
+    auto const tokens = juce::StringArray::fromTokens(version, ".", "");
+
+    // Borrowed from _juce_version_code in the JUCEUtils.cmake
+    return (tokens[0].getIntValue() << 16) + (tokens[1].getIntValue() << 8) + (tokens[2].getIntValue());
+}
+
+const char* getNameForCurrentPlugin()
+{
+    auto const pluginBundle = juce::File::getSpecialLocation(juce::File::SpecialLocationType::currentApplicationFile);
+    auto const pluginBundlePath = pluginBundle.getFullPathName();
+
+    return getNameForPluginBundle(pluginBundlePath.toRawUTF8());
+}
+
+
+//==============================================================================
 using namespace juce;
 
 static Array<void*> activePlugins, activeUIs;
@@ -1045,7 +1149,7 @@ public:
     bool CanScheduleParameters() const override          { return false; }
 
     //==============================================================================
-    ComponentResult Version() override                   { return JucePlugin_VersionCode; }
+    ComponentResult Version() override                   { return getVersionForCurrentPlugin(); }
     bool SupportsTail() override                         { return true; }
     Float64 GetTailTime() override                       { return juceFilter->getTailLengthSeconds(); }
 
@@ -1075,7 +1179,7 @@ public:
     {
         inDescArray[0].componentType = kAudioUnitCarbonViewComponentType;
         inDescArray[0].componentSubType = JucePlugin_AUSubType;
-        inDescArray[0].componentManufacturer = JucePlugin_AUManufacturerCode;
+        inDescArray[0].componentManufacturer = getManufacturerCodeForCurrentPlugin();
         inDescArray[0].componentFlags = 0;
         inDescArray[0].componentFlagsMask = 0;
     }
@@ -1713,7 +1817,7 @@ public:
 
         static NSString* description (id, SEL)
         {
-            return [NSString stringWithString: nsStringLiteral (JucePlugin_Name)];
+            return [NSString stringWithString: nsStringLiteral (getNameForCurrentPlugin())];
         }
 
         static NSView* uiViewForAudioUnit (id, SEL, AudioUnit inAudioUnit, NSSize)

@@ -42,7 +42,7 @@
   license:            GPL/Commercial
   minimumCppStandard: 14
 
-  dependencies:       juce_gui_basics
+  dependencies:       juce_gui_basics, juce_audio_plugin_client
   OSXFrameworks:      WebKit
   iOSFrameworks:      WebKit
 
@@ -55,6 +55,7 @@
 #define JUCE_GUI_EXTRA_H_INCLUDED
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <juce_audio_plugin_client/juce_audio_plugin_client.h>
 
 //==============================================================================
 /** Config: JUCE_WEB_BROWSER

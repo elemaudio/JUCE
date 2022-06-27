@@ -118,6 +118,8 @@ struct WebViewKeyEquivalentResponder : public ObjCClass<WebViewClass>
         : ObjCClass<WebViewClass> ("WebViewKeyEquivalentResponder_")
     {
         ObjCClass<WebViewClass>::addMethod (@selector (performKeyEquivalent:), performKeyEquivalent);
+        ObjCClass<WebViewClass>::addMethod (@selector (acceptsFirstResponder), acceptsFirstResponder);
+        ObjCClass<WebViewClass>::addMethod (@selector (keyDown:), keyDown);
         ObjCClass<WebViewClass>::registerClass();
     }
 
@@ -154,6 +156,30 @@ private:
         }
 
         return ObjCClass<WebViewClass>::template sendSuperclassMessage<BOOL> (self, selector, event);
+    }
+
+    static BOOL acceptsFirstResponder(id self, SEL)
+    {
+        return YES;
+    }
+
+    static void keyDown(id self, SEL selector, NSEvent* event)
+    {
+        juce::PluginHostType pluginHostType;
+
+        if (pluginHostType.isAbletonLive()) {
+            // Don't let Ableton Live process the ESC key event as it will close the
+            // WKWebView while the ESC key is being processed. Grab this key event
+            // before it gets to the WKWebView and do the same thing that Ableton
+            // would normally do when hitting ESC (i.e. closing the plug-in window).
+            if ([event keyCode] == 53) {
+                [[self window] performClose:self];
+                return;
+            }
+        }
+
+        // Else pass on the event
+        ObjCClass<WebViewClass>::template sendSuperclassMessage<BOOL> (self, selector, event);
     }
 };
 

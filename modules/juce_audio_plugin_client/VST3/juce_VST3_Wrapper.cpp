@@ -108,12 +108,20 @@ using namespace Steinberg;
  extern void setNSViewFrameSize(void* view, std::tuple<int, int, int, int>& bounds);
  extern std::tuple<int, int, int, int> getNSViewFrameSize(void* view);
 
+ extern const char* getCompanyNameForPluginBundle(const char* pluginBundlePath);
  extern const char* getManufacturerCodeForPluginBundle(const char* pluginBundlePath);
  extern const char* getPluginCodeForPluginBundle(const char* pluginBundlePath);
  extern const char* getVersionForPluginBundle(const char* pluginBundlePath);
  extern const char* getNameForPluginBundle(const char* pluginBundlePath);
 
  // Wrapper functions for the above API
+ const char* getCompanyNameForCurrentPlugin()
+ {
+     auto const pluginBundle = File::getSpecialLocation(File::SpecialLocationType::currentApplicationFile);
+     auto const pluginBundlePath = pluginBundle.getFullPathName();
+     return getCompanyNameForPluginBundle(pluginBundlePath.toRawUTF8());
+ }
+
  const uint32_t getManufacturerCodeForCurrentPlugin()
  {
      auto const pluginBundle = File::getSpecialLocation(File::SpecialLocationType::currentApplicationFile);
@@ -3913,7 +3921,7 @@ static JucePluginFactory* globalFactory = nullptr;
 struct JucePluginFactory  : public IPluginFactory3
 {
     JucePluginFactory()
-        : factoryInfo (JucePlugin_Manufacturer, JucePlugin_ManufacturerWebsite,
+        : factoryInfo (getCompanyNameForCurrentPlugin(), JucePlugin_ManufacturerWebsite,
                        JucePlugin_ManufacturerEmail, Vst::kDefaultFactoryFlags)
     {
     }
@@ -4160,7 +4168,7 @@ extern "C" SMTG_EXPORT_SYMBOL IPluginFactory* PLUGIN_API GetPluginFactory()
                                                  getNameForCurrentPlugin(),
                                                  JucePlugin_Vst3ComponentFlags,
                                                  JucePlugin_Vst3Category,
-                                                 JucePlugin_Manufacturer,
+                                                 getCompanyNameForCurrentPlugin(),
                                                  getVersionForCurrentPlugin(),
                                                  kVstVersionString);
 
@@ -4172,7 +4180,7 @@ extern "C" SMTG_EXPORT_SYMBOL IPluginFactory* PLUGIN_API GetPluginFactory()
                                                   getNameForCurrentPlugin(),
                                                   JucePlugin_Vst3ComponentFlags,
                                                   JucePlugin_Vst3Category,
-                                                  JucePlugin_Manufacturer,
+                                                  getCompanyNameForCurrentPlugin(),
                                                   getVersionForCurrentPlugin(),
                                                   kVstVersionString);
 

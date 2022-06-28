@@ -59,6 +59,13 @@ std::tuple<int, int, int, int> getNSViewFrameSize(void* view)
         static_cast<int>(bounds.size.height));
 }
 
+const char* getCompanyNameForPluginBundle(const char* pluginBundlePath)
+{
+    NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
+    NSString* s = [[NSBundle bundleWithPath:bundlePath] objectForInfoDictionaryKey:@"ElemCompanyName"];
+    return [s UTF8String];
+}
+
 const char* getManufacturerCodeForPluginBundle(const char* pluginBundlePath)
 {
     NSString* bundlePath = [NSString stringWithUTF8String:pluginBundlePath];
